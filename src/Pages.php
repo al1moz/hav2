@@ -144,7 +144,7 @@ HTML
         }
         View::page('/humidite', 'Humidité', <<<'HTML'
 <h1>Humidité</h1>
-<p class="sub">L'ancien site ne mesurait que le salon. L'étage, l'extérieur et le CO₂ arriveront avec le nouvel add-on (modules Netatmo via Home Assistant).</p>
+<p class="sub">Modules Netatmo, lus par l'add-on dans Home Assistant. Seules les sondes qui envoient une mesure sont affichées.</p>
 <div class="tiles" id="hum-tiles"></div>
 <div class="controls" role="group" aria-label="Période" id="hum-ctl">
   <button type="button" data-d="30" aria-pressed="true">30 jours</button><button type="button" data-d="90">90 jours</button><button type="button" data-d="365">12 mois</button>

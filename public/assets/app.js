@@ -189,24 +189,25 @@
   async function humidity() {
     const d = await api('dashboard');
     const L = d.latest, comfort = v => v < 40 ? 'air sec' : v > 60 ? 'air humide' : 'dans la zone de confort';
+    // Une tuile par mesure reçue : une sonde absente (ex. humidité de l'étage) n'apparaît pas.
     const tiles = [];
     for (const [code, label] of [['humidity_living', 'Salon'], ['humidity_upstairs', 'Étage']]) {
-      tiles.push(L[code] ? tile(label, fmt(L[code].value, 0), '%', comfort(L[code].value)) : tile(label, '–', '', 'pas encore mesuré'));
+      if (L[code]) tiles.push(tile(label, fmt(L[code].value, 0), '%', comfort(L[code].value)));
     }
     const ho = L.humidity_outdoor, to = L.temp_outdoor;
-    tiles.push(ho ? tile('Extérieur', fmt(ho.value, 0), '%', to ? `point de rosée ${fmt(dewPoint(to.value, ho.value))} °C` : '') : tile('Extérieur', '–', '', 'pas encore mesuré'));
-    tiles.push(L.co2_living ? tile('CO₂ salon', fmt(L.co2_living.value, 0), 'ppm', '') : tile('CO₂ salon', '–', '', 'pas encore mesuré'));
+    if (ho) tiles.push(tile('Extérieur', fmt(ho.value, 0), '%', to ? `point de rosée ${fmt(dewPoint(to.value, ho.value))} °C` : ''));
+    if (L.co2_living) tiles.push(tile('CO₂ salon', fmt(L.co2_living.value, 0), 'ppm', ''));
     $('hum-tiles').innerHTML = tiles.join('');
     async function load(n) {
       const to = today(), from = addDays(to, -(n - 1)), days = daysBetween(from, to), labels = days.map(dayLabel);
-      // Seules les mesures déjà reçues sont demandées (l'étage et l'extérieur viendront avec le nouvel add-on).
-      const [hl, hu, hout, tl, tout] = await Promise.all(['humidity_living', 'humidity_upstairs', 'humidity_outdoor', 'temp_living', 'temp_outdoor'].map(m => L[m] ? summaryDays(m, from, to) : {}));
+      // Seules les mesures déjà reçues sont demandées.
+      const [hl, hu, hout, tl, tu, tout] = await Promise.all(['humidity_living', 'humidity_upstairs', 'humidity_outdoor', 'temp_living', 'temp_upstairs', 'temp_outdoor'].map(m => L[m] ? summaryDays(m, from, to) : {}));
       const v = (m, d) => m[d] ? m[d].avg : null;
       const rel = [['Salon', hl, 'var(--s1)'], ['Étage', hu, 'var(--s3)'], ['Extérieur', hout, 'var(--s2)']]
         .map(([name, m, color]) => ({ name, color, values: days.map(d => v(m, d)) })).filter(s => s.values.some(x => x !== null));
       line($('c-hum'), labels, rel, { unit: '%', band: [40, 60], bandLabel: 'confort', dec: 0, aria: 'Humidité relative' });
       $('lg-hum').innerHTML = rel.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
-      const abs = [['Salon', hl, tl, 'var(--s1)'], ['Extérieur', hout, tout, 'var(--s2)']]
+      const abs = [['Salon', hl, tl, 'var(--s1)'], ['Étage', hu, tu, 'var(--s3)'], ['Extérieur', hout, tout, 'var(--s2)']]
         .map(([name, h, t, color]) => ({ name, color, values: days.map(d => v(h, d) !== null && v(t, d) !== null ? absHum(v(t, d), v(h, d)) : null) }))
         .filter(s => s.values.some(x => x !== null));
       line($('c-abs'), labels, abs, { unit: 'g/m³', aria: 'Humidité absolue', emptyText: 'Il faut la température et l’humidité au même endroit.' });
