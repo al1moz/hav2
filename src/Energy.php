@@ -51,6 +51,20 @@ final class Energy
         return $dt > 0 && $deltaWh >= 0 && $deltaWh <= $maxPowerW * max($dt, 300) / 3600;
     }
 
+    /**
+     * Après un index refusé, le suivant le confirme-t-il comme nouvelle base ?
+     * Cas d'un compteur remplacé ou remis à zéro : deux index proches et cohérents entre eux,
+     * mais pas avec l'ancien. Une erreur de lecture isolée n'est jamais confirmée.
+     *
+     * @param array{ts:int,value:float}|null $candidate index mis de côté
+     */
+    public static function confirmsCandidate(?array $candidate, int $ts, float $value, float $factor, float $maxPowerW): bool
+    {
+        $window = 6 * 3600;
+        return $candidate !== null && $ts > $candidate['ts'] && $ts - $candidate['ts'] <= $window
+            && self::counterPlausible($candidate['ts'], $candidate['value'], $ts, $value, $factor, $maxPowerW, $window);
+    }
+
     /** Répartit $amount proportionnellement au temps passé dans chaque heure de ]t0, t1]. @return array<int,float> */
     public static function spread(int $t0, int $t1, float $amount): array
     {

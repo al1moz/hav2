@@ -100,10 +100,16 @@ HTML
   <button type="button" data-d="30" aria-pressed="true">30 jours</button><button type="button" data-d="90">90 jours</button><button type="button" data-d="365">12 mois</button>
 </div>
 <div class="two">
-  <div class="chartbox"><h3>Consommation de la PAC</h3><p class="cap">kWh par jour (circuit Géothermie, jours où le Shelly répondait)</p><p class="cap">kWh par jour (circuit Géothermie)</p><div id="c-pac"></div></div>
+  <div class="chartbox"><h3>Consommation de la PAC</h3><p class="cap">kWh par jour (circuit Géothermie, jours où le Shelly répondait)</p><div id="c-pac"></div></div>
   <div class="chartbox"><h3>Température extérieure</h3><p class="cap">°C, moyenne du jour</p><div id="c-ext"></div></div>
 </div>
-<p class="note">Les températures d'eau de la PAC (départ, retour, ballon) apparaîtront ici quand le nouvel add-on enverra les données Arkteos.</p>
+<div class="chartbox" id="pac-box">
+  <h3>Températures d'eau de la PAC</h3>
+  <p class="cap" id="pac-cap">Elles apparaîtront ici quand l'add-on enverra les données Arkteos.</p>
+  <div class="tiles" id="pac-tiles"></div>
+  <div id="c-water"></div>
+  <div class="legend" id="lg-water"></div>
+</div>
 <div class="chartbox" id="appoint">
   <h3>Résistance d'appoint du ballon ECS</h3>
   <p class="cap" id="ecs-cap">Elle ne devrait jamais s'allumer.</p>
