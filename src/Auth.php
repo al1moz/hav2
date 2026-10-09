@@ -20,10 +20,7 @@ final class Auth
             Http::error(401, 'unauthorized', 'Jeton manquant ou invalide.');
             return null;
         }
-        $token = Db::one(
-            'SELECT id, name, scopes FROM api_token WHERE token_hash = ? AND revoked_at IS NULL',
-            [hash('sha256', $m[1])]
-        );
+        $token = self::lookup($m[1]);
         if ($token === null) {
             header('WWW-Authenticate: Bearer');
             Http::error(401, 'unauthorized', 'Jeton manquant ou invalide.');
@@ -33,12 +30,40 @@ final class Auth
             Http::error(403, 'forbidden', "Ce jeton n'a pas la portée « $scope ».");
             return null;
         }
+        self::touch((int) $token['id']);
+        return $token;
+    }
+
+    /**
+     * Jeton valide ayant cette portée (page tablette : jeton passé dans l'adresse ou le cookie).
+     * @return array<string,mixed>|null la ligne api_token
+     */
+    public static function checkToken(string $value, string $scope): ?array
+    {
+        if (!preg_match('/^[A-Za-z0-9_\-]{20,128}$/', $value)) {
+            return null;
+        }
+        $token = self::lookup($value);
+        if ($token === null || !in_array($scope, explode(',', (string) $token['scopes']), true)) {
+            return null;
+        }
+        self::touch((int) $token['id']);
+        return $token;
+    }
+
+    /** @return array<string,mixed>|null */
+    private static function lookup(string $value): ?array
+    {
+        return Db::one('SELECT id, name, scopes FROM api_token WHERE token_hash = ? AND revoked_at IS NULL', [hash('sha256', $value)]);
+    }
+
+    private static function touch(int $id): void
+    {
         Db::run(
             'UPDATE api_token SET last_used_at = UTC_TIMESTAMP()
               WHERE id = ? AND (last_used_at IS NULL OR last_used_at < UTC_TIMESTAMP() - INTERVAL 1 MINUTE)',
-            [$token['id']]
+            [$id]
         );
-        return $token;
     }
 
     /**

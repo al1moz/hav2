@@ -22,6 +22,14 @@ docker compose exec php php bin/password.php   # mot de passe du site (12 caract
 
 Le site est entièrement privé : toutes les pages demandent ce mot de passe.
 
+Sans add-on branché sur le Docker local, des fausses mesures crédibles remplissent les pages
+(refusé si `APP_DEBUG` n'est pas à 1, donc jamais en production) :
+
+```sh
+docker compose exec php php bin/fake-data.php --days=30   # historique, sans écraser ce qui existe
+docker compose exec php php bin/fake-data.php --live      # puis une mesure toutes les 5 minutes
+```
+
 Contrôles :
 
 ```sh
@@ -40,6 +48,20 @@ docker compose exec php php bin/token.php revoke <id>
 
 Le jeton n'est affiché qu'une fois. Seule son empreinte SHA-256 est en base.
 Test de bout en bout : `INGEST=<jeton> READ=<jeton> sh tests/smoke.sh`.
+
+## Page tablette
+
+`/tablette` : horloge, sondes Netatmo, METAR de l'aérodrome et webcam en fond, réglés dans
+l'administration (section Tablette). Les valeurs se rechargent chaque minute, la webcam toutes les 5 minutes,
+sans recharger la page. Le thème « Nuit » peut remplacer celui de la tablette de 22 h à 7 h.
+
+La tablette n'a pas besoin du mot de passe du site : créer un jeton de portée `tablet`, puis ouvrir
+une fois sur la tablette l'adresse affichée (`/tablette?jeton=…`). Le jeton est gardé dans un cookie
+qui n'ouvre que cette page ; le révoquer dans l'administration coupe l'accès.
+
+Si la tablette est déjà réglée sur une ancienne adresse, la mettre dans `.env` (`TABLET_LEGACY_PATH`) :
+la page y répond aussi. Le serveur web doit alors passer les adresses en `.php` au routeur
+(voir `docker/nginx/default.conf`).
 
 ## Reprendre l'historique de l'ancien site
 
@@ -99,10 +121,10 @@ Réponse `202` : `{"accepted": 3, "duplicates": 0, "late": 0, "rejected": 0, "er
 ```
 public/index.php   seul fichier exposé : routes de l'API et des pages
 bootstrap.php      chargement automatique des classes de src/ et du .env
-src/               Config, Db, Router, Http, Auth, Session, Time, Units, Energy, Aggregates, Ingest, Ecs, View, Pages, Admin, Api/
-public/assets/     app.css (6 thèmes), charts.js (graphiques SVG), app.js (remplissage des pages)
+src/               Config, Db, Router, Http, Auth, Session, Time, Units, Energy, Aggregates, Ingest, Ecs, View, Pages, Admin, Tablet, Metar, Api/
+public/assets/     app.css (6 thèmes), charts.js (graphiques SVG), app.js (remplissage des pages), tablet.css et tablet.js (page tablette), fonts/ (Orbitron, licence OFL)
 sql/               schéma et données de départ
-bin/               migrate.php, password.php, token.php, migrate-releve.php
+bin/               migrate.php, password.php, token.php, migrate-releve.php, fake-data.php
 tests/             unit.php (calculs), smoke.sh (API de bout en bout)
 docker/            image php:7.4-fpm et configuration nginx
 ```

@@ -39,6 +39,7 @@ Pour lire le site depuis un fil Claude : un seul jeton de portée `read`, rangé
 - Tables principales : `metric` (code, source, libellé, unité, `kind` gauge/counter, `energy_factor`), `sample` (clé metric_id + ts), `sample_hourly`, `sample_daily`, `sample_latest`, `setting`, `price`, `api_token`, `ingest_batch`, `login_attempt`.
 - Jetons d'API hachés en SHA-256, portées `ingest`, `read`, `tablet`. Session du site : cookie `consov2` 30 jours, CSRF, 5 échecs de connexion par 15 min et par IP.
 - Thèmes : variables CSS sous `html[data-theme=clair|sombre|encre|lcd|nuit|contraste]`.
+- Page tablette (`src/Tablet.php`, `src/Metar.php`, `public/assets/tablet.*`), reprise de l'ancienne page « pi » : `/tablette` et l'ancienne adresse réglée sur la tablette, donnée par `TABLET_LEGACY_PATH` dans `.env` (elle contient le nom de la commune : jamais dans le dépôt). nginx passe les adresses `.php` au routeur. Accès par la session ou par un jeton `tablet` ouvert une fois en `?jeton=…`, puis gardé dans le cookie `consov2_tablette`. Webcam, code OACI et pistes sont des réglages de l'admin (`tablet_*`) ; METAR d'aviationweather.gov gardé 5 min dans `setting.tablet_metar_cache`. Valeurs rechargées chaque minute, webcam toutes les 5 min, thème Nuit de 22 h à 7 h en option. JS en ES5 et CSS sans variables, pour un vieux navigateur.
 
 ### Modèle d'énergie (`src/Energy.php`)
 
@@ -78,6 +79,7 @@ Pour lire le site depuis un fil Claude : un seul jeton de portée `read`, rangé
 
 - `docker compose up -d --build`, puis `docker compose exec php php bin/migrate.php` et `php tests/unit.php`. Sur le Mac d'Alain, `WEB_PORT=8081` (le 8080 est pris par un autre projet).
 - Dans un conteneur cloud : démarrer Docker avec `dockerd` si besoin ; Docker Hub limite les téléchargements (erreur 429), passer par `mirror.gcr.io/library/<image>` puis `docker tag`. Les registres ghcr.io et deb.debian.org y sont bloqués : l'image de l'add-on ne peut pas y être construite, la tester avec un venv (`pyserial`, `paho-mqtt`).
+- Le Docker local d'Alain ne reçoit rien de l'add-on (branché sur la production) : `php bin/fake-data.php --days=30` le remplit de fausses mesures, `--live` en ajoute toutes les 5 min, `--ecs` simule une activation de l'appoint. Refusé sans `APP_DEBUG=1`.
 - Un pseudo-terminal (pty) ne se rouvre pas après fermeture (erreur 22) : c'est un artefact des tests, pas un bug du lecteur Linky.
 - Pousser depuis le Mac : son dépôt utilise SSH, inaccessible depuis Claude. Faire le commit dans la copie du Mac (git y demande l'autorisation de suppression, pour ses fichiers `.lock`), l'apporter au conteneur avec `git bundle`, puis pousser ce même commit depuis le conteneur : le Mac reste aligné sur `main`.
 
@@ -85,7 +87,8 @@ Pour lire le site depuis un fil Claude : un seul jeton de portée `read`, rangé
 
 - PAC : environ une lecture sur deux échouait avec la 0.1.2 (délai dépassé, « No route to host ») ; vérifier que la 0.1.3 fait mieux. Consignes de zone lues à 0 et eau retour plus chaude que départ : à comparer avec l'écran de la PAC.
 - Pression atmosphérique : entité Netatmo à relayer en `pressure_outdoor` avec `unit: hPa` (Netatmo annonce des mbar, unité que le site refuse).
-- Page tablette (`/tablette`, jeton `tablet`), discussion avec Claude et connecteur MCP sur les données.
+- Page tablette en production : `TABLET_LEGACY_PATH` dans le `.env`, nginx qui passe les `.php` au site, section Tablette de l'admin remplie, jeton `tablet` ouvert une fois sur la tablette. Le toucher du METAR qui montrait la caméra du hangar n'est pas repris (adresse en http).
+- Discussion avec Claude et connecteur MCP sur les données.
 
 <!-- rtk-instructions v2 -->
 # Command output

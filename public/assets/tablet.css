@@ -1,0 +1,100 @@
+/* Page tablette. Sans variables CSS ni grille, pour rester lisible par de vieux navigateurs.
+   Mise en page reprise de l'ancienne page (écran 1024 x 768 en paysage), en unités d'écran. */
+@font-face{font-family:"Orbitron";font-style:normal;font-weight:400;font-display:swap;
+  src:url("fonts/orbitron-latin-400-normal.woff2") format("woff2"),url("fonts/orbitron-latin-400-normal.woff") format("woff")}
+
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
+[hidden]{display:none!important}
+body{background-color:#000;background-repeat:no-repeat;background-position:center;background-size:cover;
+  font-family:"Orbitron",sans-serif;font-size:1.27vw;color:#e0e0e0;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+@media (orientation:portrait){body{font-size:1.9vw}}
+
+.box{background-color:rgba(0,0,0,.7);border:2px solid #0f0f0f;border-radius:10px;padding:.9em;margin-bottom:.8em;text-align:center}
+.lbl{font-size:1em;color:#e0e0e0}
+.val{font-size:3em;line-height:1.15;color:#fff;white-space:nowrap}
+.val small{font-size:.55em}
+.val2{font-size:1.8em;color:#fff}
+.note{font-size:.85em;margin-top:.3em}
+.age{font-size:.85em;margin-top:.2em}
+.small .val{font-size:1.6em}
+.pressure .val,.val.p{color:#0ff}
+.wind .val,.right .val.p{font-size:2.4em}
+.stale{opacity:.5}
+
+.col{position:absolute;width:15.9%}
+.left{top:2.6%;left:1%}
+.right{top:22%;right:1%}
+.metar{position:absolute;top:2.6%;left:19.5%;right:1%;font-size:1em;line-height:1.5}
+.metar .raw{font-size:.9em;margin-top:.2em}
+.clock{position:absolute;left:18.5%;right:18.5%;bottom:2.5%;text-align:center;color:#fff;text-shadow:0 0 .15em rgba(0,0,0,.9)}
+.time{font-size:9.4em;line-height:1}
+.date{font-size:3.4em}
+.offline{display:inline-block;margin-top:.6em;padding:.3em .8em;border-radius:6px;background:rgba(0,0,0,.7);color:#ff8a3d;font-size:1.1em}
+@media (orientation:portrait){
+  .col{width:30%}
+  .right{top:auto;bottom:24%}
+  .metar{left:33%}
+  .clock{left:2%;right:2%}
+}
+
+/* Couleurs d'état (vent, conditions) : mêmes teintes que l'ancienne page. */
+.ok{color:#2ed52e}
+.warn{color:#ea4700}
+.bad{color:#c70000}
+
+.denied{max-width:36em;margin:10vh auto;padding:0 16px;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.5;color:#e6ece9}
+.denied h1{font-size:1.4em}
+.denied a{color:#5cc79f}
+
+/* Clair : cases claires sur la webcam. */
+html[data-theme="clair"] .box{background-color:rgba(255,255,255,.82);border-color:#dde3e0;color:#17201d}
+html[data-theme="clair"] .lbl{color:#5d6a65}
+html[data-theme="clair"] .val,html[data-theme="clair"] .val2{color:#17201d}
+html[data-theme="clair"] .pressure .val,html[data-theme="clair"] .val.p{color:#0b6e8a}
+html[data-theme="clair"] .ok{color:#1d7a33}
+html[data-theme="clair"] .warn{color:#b45309}
+html[data-theme="clair"] .bad{color:#b91c1c}
+
+/* Les autres thèmes masquent la webcam. */
+html[data-theme="nuit"] body,html[data-theme="encre"] body,html[data-theme="lcd"] body,html[data-theme="contraste"] body{background-image:none!important}
+
+/* Nuit : orange faible, rien de vif. */
+html[data-theme="nuit"] body{background-color:#0a0605;color:#b06a40}
+html[data-theme="nuit"] .box{background-color:#140b08;border-color:#2a150d}
+html[data-theme="nuit"] .lbl{color:#b06a40}
+html[data-theme="nuit"] .val,html[data-theme="nuit"] .val2,html[data-theme="nuit"] .clock{color:#ff9b5c;text-shadow:none}
+html[data-theme="nuit"] .pressure .val,html[data-theme="nuit"] .val.p{color:#ffbf8a}
+html[data-theme="nuit"] .ok{color:#ff9b5c}
+html[data-theme="nuit"] .warn{color:#ff6a2a}
+html[data-theme="nuit"] .bad{color:#ff3a14}
+html[data-theme="nuit"] .offline{background:#140b08;color:#ff6a2a}
+
+/* Encre électronique : noir sur papier, l'état se lit au gras et au soulignement. */
+html[data-theme="encre"] body{background-color:#ecebe6;color:#111;font-family:Georgia,"Times New Roman",serif}
+html[data-theme="encre"] .box{background-color:#ecebe6;border-color:#111;border-radius:0}
+html[data-theme="encre"] .lbl,html[data-theme="encre"] .val,html[data-theme="encre"] .val2,html[data-theme="encre"] .clock,
+html[data-theme="encre"] .pressure .val,html[data-theme="encre"] .val.p,html[data-theme="encre"] .ok{color:#111;text-shadow:none}
+html[data-theme="encre"] .warn{color:#111;font-weight:bold}
+html[data-theme="encre"] .bad{color:#111;font-weight:bold;text-decoration:underline}
+html[data-theme="encre"] .offline{background:#ecebe6;color:#111;border:2px solid #111}
+
+/* LCD : afficheur vert rétro. */
+html[data-theme="lcd"] body{background-color:#9fb08a;color:#1d2615}
+html[data-theme="lcd"] .box{background-color:#a9ba93;border-color:#7f9070;border-radius:4px}
+html[data-theme="lcd"] .lbl{color:#3f4d33}
+html[data-theme="lcd"] .val,html[data-theme="lcd"] .val2,html[data-theme="lcd"] .clock,
+html[data-theme="lcd"] .pressure .val,html[data-theme="lcd"] .val.p,html[data-theme="lcd"] .ok{color:#1d2615;text-shadow:none}
+html[data-theme="lcd"] .warn{color:#1d2615;font-weight:bold}
+html[data-theme="lcd"] .bad{color:#1d2615;font-weight:bold;text-decoration:underline}
+html[data-theme="lcd"] .offline{background:#a9ba93;color:#1d2615}
+
+/* Contraste élevé : lisible de loin. */
+html[data-theme="contraste"] body{background-color:#000;color:#fff}
+html[data-theme="contraste"] .box{background-color:#000;border-color:#fff}
+html[data-theme="contraste"] .lbl{color:#e6e6e6}
+html[data-theme="contraste"] .val,html[data-theme="contraste"] .val2,html[data-theme="contraste"] .clock{color:#fff;text-shadow:none}
+html[data-theme="contraste"] .pressure .val,html[data-theme="contraste"] .val.p{color:#00e5ff}
+html[data-theme="contraste"] .ok{color:#7dff5b}
+html[data-theme="contraste"] .warn{color:#ffd400}
+html[data-theme="contraste"] .bad{color:#ff4d4d}

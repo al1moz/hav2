@@ -9,6 +9,7 @@ use Conso\Config;
 use Conso\Http;
 use Conso\Pages;
 use Conso\Router;
+use Conso\Tablet;
 
 set_exception_handler(function (\Throwable $e): void {
     error_log((string) $e);
@@ -42,6 +43,11 @@ $router->add('GET', '/temperatures', [Pages::class, 'temperatures']);
 $router->add('GET', '/humidite', [Pages::class, 'humidity']);
 $router->add('GET', '/comparer', [Pages::class, 'compare']);
 $router->add('GET', '/admin', [Pages::class, 'admin']);
+
+// Page tablette (session du site ou jeton « tablet »)
+foreach (Tablet::paths() as $path) {
+    $router->add('GET', $path, [Tablet::class, 'page']);
+}
 $router->add('POST', '/admin', [Pages::class, 'admin']);
 
 $router->dispatch($_SERVER['REQUEST_METHOD'] ?? 'GET', parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/');

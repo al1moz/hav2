@@ -70,10 +70,10 @@ final class View
         header('Location: ' . $to, true, 303);
     }
 
-    private static function assetVersion(): string
+    public static function assetVersion(): string
     {
         $t = 0;
-        foreach (['app.css', 'app.js', 'charts.js'] as $f) {
+        foreach (['app.css', 'app.js', 'charts.js', 'tablet.css', 'tablet.js'] as $f) {
             $t = max($t, (int) @filemtime(APP_ROOT . '/public/assets/' . $f));
         }
         return (string) $t;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Conso\Energy;
+use Conso\Metar;
 use Conso\Time;
 use Conso\Units;
 
@@ -60,6 +61,27 @@ $check('date sans fuseau refusée', Time::parse('2026-10-09 16:20:00') === null)
 $check('date locale hiver', Time::localDate((int) Time::parse('2026-01-10T22:30:00Z')) === '2026-01-10');
 $check('date locale été', Time::localDate((int) Time::parse('2026-07-10T22:30:00Z')) === '2026-07-11');
 $check('borne de journée locale', Time::parseBound('2026-07-11', false) === Time::parse('2026-07-10T22:00:00Z'));
+
+// METAR (page tablette) : objets JSON d'aviationweather.gov, aérodrome fictif.
+$base = ['rawOb' => 'METAR LFPG 091600Z 25013KT 9999 SCT034 BKN086 OVC100 18/13 Q1017 NOSIG', 'wdir' => 250, 'wspd' => 13,
+    'altim' => 1017, 'obsTime' => 1791561600, 'fltCat' => 'VFR',
+    'clouds' => [['cover' => 'SCT', 'base' => 3400], ['cover' => 'BKN', 'base' => 8600], ['cover' => 'OVC', 'base' => 10000]]];
+$d = Metar::describe($base, [70, 250]);
+$check('METAR : VFR, QNH, vent dans l\'axe', $d['category'] === 'VFR' && $d['qnh'] === 1017 && $d['wind']['dir'] === '250'
+    && $d['wind']['level'] === 'ok' && $d['wind']['cross'] === 0 && $d['wind']['gust'] === null);
+$check('METAR : nuages en clair', count($d['clouds']) === 3 && $d['clouds'][0] === 'Nuages épars, 3/8 à 4/8 à 3400 ft');
+$check('METAR : visibilité 4000 m = IFR', Metar::describe(['rawOb' => 'METAR LFPG 091600Z 25005KT 4000 BR OVC004 12/12 Q1012', 'wdir' => 250, 'wspd' => 5], [250])['category'] === 'IFR');
+$cavok = Metar::describe(['rawOb' => 'METAR LFPG 091600Z 07008KT CAVOK 21/09 Q1024 TEMPO 3000 BR'], [70, 250]);
+$check('METAR : CAVOK, TEMPO ignoré, vent lu dans le message', $cavok['category'] === 'VFR' && $cavok['clouds'] === ['CAVOK']
+    && $cavok['wind']['dir'] === '070' && $cavok['wind']['speed'] === 8 && $cavok['qnh'] === 1024);
+$check('METAR : rafales', Metar::describe($base + ['wgst' => 25], [250])['wind']['gust'] === 25);
+$check('METAR : vent variable', Metar::describe(['rawOb' => 'METAR LFPG 091600Z VRB03KT 9999 NSC 15/10 Q1020'], [250])['wind']['dir'] === 'VRB');
+$check('vent de travers 20 kt = hors limites', Metar::wind(340, 20, [70, 250])['level'] === 'bad');
+$check('vent de travers 17 kt = limite pilote', Metar::wind(310, 20, [250])['level'] === 'warn');
+$check('vent arrière 5 kt = hors limites', Metar::wind(70, 5, [250])['level'] === 'bad');
+$check('piste la plus favorable retenue', Metar::wind(70, 5, [70, 250])['level'] === 'ok');
+$check('sans piste, pas de couleur', Metar::wind(250, 13, [])['level'] === null);
+$check('pistes en degrés ou en numéros', Metar::runways('07/25') === [70, 250] && Metar::runways('070, 250') === [70, 250] && Metar::runways('') === []);
 
 echo $failures === 0 ? "\nTous les tests passent.\n" : "\n$failures test(s) en échec.\n";
 exit($failures === 0 ? 0 : 1);

@@ -104,7 +104,7 @@ final class Session
         return $value;
     }
 
-    private static function isHttps(): bool
+    public static function isHttps(): bool
     {
         return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';

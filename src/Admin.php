@@ -33,6 +33,32 @@ final class Admin
                 self::set(['theme_site' => $theme]);
                 return 'Thème « ' . View::THEMES[$theme][0] . ' » appliqué.';
 
+            case 'tablet':
+                $theme = (string) ($post['theme_tablet'] ?? '');
+                $background = trim((string) ($post['tablet_background'] ?? ''));
+                $icao = strtoupper(trim((string) ($post['tablet_icao'] ?? '')));
+                $runways = trim((string) ($post['tablet_runways'] ?? ''));
+                if (!isset(View::THEMES[$theme])) {
+                    return 'Thème inconnu.';
+                }
+                if ($background !== '' && !Tablet::validImageUrl($background)) {
+                    return 'Image de fond : une adresse http:// ou https:// complète, sans espace ni guillemet.';
+                }
+                if ($icao !== '' && !preg_match('/^[A-Z0-9]{4}$/', $icao)) {
+                    return 'Aérodrome : code OACI de 4 caractères, ou vide pour ne pas afficher le METAR.';
+                }
+                if (mb_strlen($runways) > 40 || ($runways !== '' && !Metar::runways($runways))) {
+                    return 'Pistes : orientations en degrés séparées par des virgules (ex. 070, 250).';
+                }
+                self::set([
+                    'theme_tablet' => $theme,
+                    'tablet_night' => isset($post['tablet_night']) ? '1' : '0',
+                    'tablet_background' => $background,
+                    'tablet_icao' => $icao,
+                    'tablet_runways' => $runways,
+                ]);
+                return 'Réglages de la tablette enregistrés.';
+
             case 'price_add':
                 $from = (string) ($post['valid_from'] ?? '');
                 $price = str_replace(',', '.', (string) ($post['kwh_price'] ?? ''));
@@ -67,7 +93,13 @@ final class Admin
                     return 'Jeton : un nom et au moins une portée.';
                 }
                 $token = Auth::createToken($name, $scopes);
-                return "Jeton « $name » créé. Copie-le maintenant, il ne sera plus affiché :\n$token";
+                $message = "Jeton « $name » créé. Copie-le maintenant, il ne sera plus affiché :\n$token";
+                if (in_array('tablet', $scopes, true)) {
+                    $host = preg_replace('/[^A-Za-z0-9.:-]/', '', (string) ($_SERVER['HTTP_HOST'] ?? ''));
+                    $message .= "\n\nSur la tablette, ouvre une fois cette adresse (elle garde ensuite le jeton) :\n"
+                        . (Session::isHttps() ? 'https' : 'http') . '://' . $host . Tablet::path() . '?jeton=' . $token;
+                }
+                return $message;
 
             case 'token_revoke':
                 Db::run('UPDATE api_token SET revoked_at = UTC_TIMESTAMP() WHERE id = ? AND revoked_at IS NULL', [(int) ($post['id'] ?? 0)]);
@@ -119,6 +151,24 @@ final class Admin
                 . '<span>' . $h($label) . '</span><small>' . $h($desc) . '</small></label>';
         }
         $out .= '<section class="panel"><h2>Thème du site</h2>' . $form('theme', '<div class="opts">' . $opts . '</div><button type="submit">Appliquer</button>') . '</section>';
+
+        // Tablette
+        $tabletTheme = Settings::get('theme_tablet', 'sombre');
+        $opts = '';
+        foreach (View::THEMES as $key => [$label, $desc]) {
+            $opts .= '<label class="opt"><input type="radio" name="theme_tablet" value="' . $key . '"' . ($key === $tabletTheme ? ' checked' : '') . '>'
+                . '<span>' . $h($label) . '</span><small>' . $h($desc) . '</small></label>';
+        }
+        $out .= '<section class="panel"><h2>Tablette</h2><p class="note">La page <a href="' . $h(Tablet::path()) . '">' . $h(Tablet::path()) . '</a> : horloge, sondes Netatmo, METAR et webcam en fond. '
+            . 'La tablette s\'ouvre avec un jeton de portée « tablet » (section Jetons d\'API), sans donner accès au reste du site.</p>'
+            . $form('tablet', '<div class="opts">' . $opts . '</div>'
+                . '<label class="check"><input type="checkbox" name="tablet_night"' . (Settings::get('tablet_night', '1') === '1' ? ' checked' : '') . '> Thème Nuit de 22 h à 7 h</label>'
+                . '<div class="fields">'
+                . self::field('tablet_background', 'Image de fond (webcam)', Settings::get('tablet_background'), 'text', 'Rechargée toutes les 5 minutes, visible avec les thèmes Clair et Sombre. Une adresse https, sinon la tablette la bloque.')
+                . self::field('tablet_icao', 'Aérodrome du METAR (code OACI)', Settings::get('tablet_icao'), 'text', 'Vide : pas de METAR.')
+                . self::field('tablet_runways', 'Orientation des pistes (degrés)', Settings::get('tablet_runways'), 'text', 'Ex. 070, 250. Sert à colorer le vent selon la piste la plus favorable.')
+                . '</div><button type="submit">Enregistrer</button>')
+            . '</section>';
 
         // Prix
         $rows = '';
