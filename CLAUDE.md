@@ -13,6 +13,8 @@ Suivi de la consommation d'une maison : un add-on Home Assistant collecte les me
 
 Production : https://conso.ctrl.ovh, l'ancien domaine. Alain y a mis le nouveau site le 9 oct. 2026 ; à confirmer en appelant l'API.
 
+Pour lire le site depuis un fil Claude : un seul jeton de portée `read`, rangé dans la variable d'environnement `CONSOV2_READ_TOKEN` de l'environnement cloud du projet (jamais dans le chat), puis `curl -H "Authorization: Bearer $CONSOV2_READ_TOKEN" https://conso.ctrl.ovh/api/v1/latest`. Sans jeton, seul `/api/v1/health` répond.
+
 ## Façon de travailler avec Alain
 
 - Il écrit en français : répondre en français, simplement, en commençant par la réponse.
@@ -58,6 +60,7 @@ Production : https://conso.ctrl.ovh, l'ancien domaine. Alain y a mis le nouveau 
 ### Ce qu'on sait des données
 
 - Historique repris de l'ancien site (dump `conso-09-10-2026.sql`, table `releve`) par `bin/migrate-releve.php`. Totaux annuels attendus : 6221 kWh (2023), 6559 (2024), 6606 (2025), 4881 (janv.–sept. 2026). 532 index aberrants écartés (valeurs ×1000 ou tronquées).
+- Ne plus lancer `bin/migrate-releve.php --reset` depuis que l'add-on envoie : il efface toutes les données des 13 mesures reprises (index, 8 circuits, sondes), y compris celles de l'add-on, et remet leur dernière valeur à celle de l'ancien site.
 - Les Shelly ont envoyé des zéros à partir du 4 oct. 2026 à 05:35 (pannes aussi les 11–12 et 27–28 sept.) : les pages affichent alors « Shelly absents » au lieu d'un faux « Reste ».
 - Appoint ECS (résistance du ballon) : ne devrait jamais s'allumer. 8 activations dans l'historique (3,12 kWh), la dernière le 27 août 2025. Seuil 500 W (`ecs_threshold_w`).
 - Tarif EDF Base, pas de panneaux solaires, pas de climatisation (prévue en 2027).
