@@ -70,7 +70,8 @@ Pour lire le site depuis un fil Claude : un seul jeton de portée `read`, rangé
 - Collecteurs : Linky (port série 9600 7E1, mode standard, checksum vérifié, index EASF01), PAC Arkteos (TCP 9641, trames de 163 et 227 octets, valeurs signées sur 16 bits), Shelly EM (MQTT `shellies/shellyemN/emeter/C/power`, valeur absolue comme avant), entités HA (API du Supervisor).
 - Toutes les 5 min calées sur l'horloge : moyenne des grandeurs, dernier index ; file SQLite dans `/data` (ordre conservé, renvoi de 30 s à 15 min) ; envoi immédiat quand l'appoint ECS franchit le seuil.
 - Sorties : API du site, InfluxDB (line protocol, mêmes noms et types que teleinfo/arkteos/getMqtt), MQTT (découverte HA, appareil « ConsoV2 », anciens sujets `arkteos/reg3/…`), et facultativement l'ancien `receiver.php` pendant la transition.
-- Version 0.1.1 installée et démarrée sur le Home Assistant d'Alain le 9 oct. 2026 (Linky lu, MQTT connecté). La 0.1.1 corrige les types InfluxDB du Linky (ADSC en entier).
+- Version 0.1.1 installée et démarrée sur le Home Assistant d'Alain le 9 oct. 2026 (Linky lu, MQTT connecté). La 0.1.1 corrige les types InfluxDB du Linky (ADSC en entier). La 0.1.2 (même jour) n'avertit plus à chaque échec de lecture de la PAC, seulement après 15 min sans réponse.
+- Le 9 oct. au soir, les 28 mesures arrivent sur conso.ctrl.ovh, dont la sonde de l'étage (module mezzanine : `temp_upstairs`, `humidity_upstairs`). Les premières mesures Netatmo, arrivées sous des codes inversés (`living_temp`…), ont été rattachées par `sql/005_netatmo_codes.sql`.
 - Tests : `python3 -m unittest discover -s consov2/tests` dans HAPython.
 
 ## Développement local
@@ -82,7 +83,18 @@ Pour lire le site depuis un fil Claude : un seul jeton de portée `read`, rangé
 
 ## Reste à faire
 
-- Vérifier que toutes les mesures arrivent sur conso.ctrl.ovh (Linky, 8 circuits, PAC, Netatmo).
-- Sonde de l'étage : pas d'entité Netatmo fournie pour l'instant (`temp_upstairs`).
-- Couper `legacy_receiver_url` quand l'ancien site ne sert plus, puis supprimer les anciens add-ons de HAPython.
+- PAC : environ une lecture sur deux échoue (délai dépassé, « No route to host ») ; vérifier que l'ancien add-on `arkteos` est arrêté. Consignes de zone lues à 0 et eau retour plus chaude que départ : à comparer avec l'écran de la PAC.
+- Couper `legacy_receiver_url` dans l'add-on (l'ancien site ne répond plus, 404), puis supprimer les anciens add-ons de HAPython.
+- Facultatif : pression atmosphérique (`pressure_outdoor`, déjà déclarée) depuis la station Netatmo.
 - Page tablette (`/tablette`, jeton `tablet`), discussion avec Claude et connecteur MCP sur les données.
+
+<!-- rtk-instructions v2 -->
+# Command output
+
+Command output here is condensed to save tokens, keeping every signal and
+dropping costly noise. Treat it as the complete result: run commands
+normally, and batch related commands into one call to avoid extra turns.
+Truncated results state their recovery path in their own output. Re-run a
+command as `rtk proxy <cmd>` only when its result is unusable: empty when
+output was clearly expected, contradicting its exit code, or garbled.
+<!-- /rtk-instructions -->
