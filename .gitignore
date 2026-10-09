@@ -1,0 +1,5 @@
+.env
+/var/
+.DS_Store
+.idea/
+*.tar.gz

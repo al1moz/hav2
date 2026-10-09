@@ -1,0 +1,323 @@
+<?php
+declare(strict_types=1);
+
+namespace Conso\Api;
+
+use Conso\Auth;
+use Conso\Db;
+use Conso\Ecs;
+use Conso\Http;
+use Conso\Metrics;
+use Conso\Settings;
+use Conso\Time;
+use Conso\Config;
+
+/** Données préparées pour les pages du site (une route par page, lecture seule). */
+final class Views
+{
+    private const TOTAL = 'elec_index';
+
+    /** GET /api/v1/dashboard : page Aujourd'hui. */
+    public static function dashboard(): void
+    {
+        if (!Auth::requireRead()) {
+            return;
+        }
+        $now = time();
+        $tz = Config::timezone();
+        $midnight = (new \DateTimeImmutable('@' . $now))->setTimezone($tz)->setTime(0, 0)->getTimestamp();
+        $yMidnight = (new \DateTimeImmutable('@' . $midnight))->setTimezone($tz)->modify('-1 day')->getTimestamp();
+
+        $total = Metrics::find(self::TOTAL);
+        $today = $yesterdaySameTime = $yesterday = null;
+        $power = null;
+        if ($total !== null) {
+            $today = self::energyBetween($total['id'], $midnight, $now);
+            $yesterdaySameTime = self::energyBetween($total['id'], $yMidnight, $yMidnight + ($now - $midnight));
+            $yesterday = self::energyBetween($total['id'], $yMidnight, $midnight);
+            $last = Db::all('SELECT ts, value FROM sample WHERE metric_id = ? ORDER BY ts DESC LIMIT 2', [$total['id']]);
+            if (count($last) === 2) {
+                $dt = Time::fromDb($last[0]['ts']) - Time::fromDb($last[1]['ts']);
+                if ($dt > 0 && $dt <= 900) {
+                    $power = [
+                        'value' => round(((float) $last[0]['value'] - (float) $last[1]['value']) * $total['energy_factor'] * 3600 / $dt),
+                        'unit' => 'W',
+                        'ts' => Time::iso(Time::fromDb($last[0]['ts'])),
+                    ];
+                }
+            }
+        }
+
+        $latest = [];
+        foreach (Db::all('SELECT m.code, m.source, m.unit, l.ts, l.value FROM sample_latest l JOIN metric m ON m.id = l.metric_id') as $r) {
+            $latest[$r['code']] = ['value' => (float) $r['value'], 'unit' => $r['unit'], 'ts' => Time::iso(Time::fromDb($r['ts'])), 'source' => $r['source']];
+        }
+        if (isset($latest['elec_power'])) {
+            $power = $latest['elec_power'];
+        }
+
+        $staleAfter = Settings::int('stale_after_minutes', 60) * 60;
+        $sources = [];
+        foreach ($latest as $m) {
+            $ts = (int) Time::parse($m['ts']);
+            $sources[$m['source']] = max($sources[$m['source']] ?? 0, $ts);
+        }
+        $sourceList = [];
+        foreach ($sources as $name => $ts) {
+            $sourceList[] = ['source' => $name, 'last_ts' => Time::iso($ts), 'stale' => $now - $ts > $staleAfter];
+        }
+        $lastTs = $sources ? max($sources) : null;
+
+        $alertDays = Settings::int('ecs_alert_days', 7);
+        $ecsRecent = Ecs::episodes($now - $alertDays * 86400);
+        $price = self::priceAt(Time::localDate($now));
+
+        Http::json(200, [
+            'now' => Time::iso($now),
+            'site_name' => Settings::get('site_name', 'Maison'),
+            'stale_after_s' => $staleAfter,
+            'last_ts' => $lastTs === null ? null : Time::iso($lastTs),
+            'stale' => $lastTs === null || $now - $lastTs > $staleAfter,
+            'sources' => $sourceList,
+            'power' => $power,
+            'today_kwh' => $today,
+            'yesterday_same_time_kwh' => $yesterdaySameTime,
+            'yesterday_kwh' => $yesterday,
+            'kwh_price' => $price,
+            'today_cost_eur' => $today === null ? null : round($today * $price, 2),
+            'latest' => $latest,
+            'ecs_alert' => ['days' => $alertDays, 'episodes' => $ecsRecent],
+        ]);
+    }
+
+    /**
+     * GET /api/v1/breakdown?from=AAAA-MM-JJ&to=AAAA-MM-JJ&period=day|month|year
+     * kWh du compteur Linky et de chaque circuit mesuré, « reste » = Linky moins les circuits.
+     */
+    public static function breakdown(): void
+    {
+        if (!Auth::requireRead()) {
+            return;
+        }
+        [$from, $to] = self::dayRange(30);
+        $length = ['day' => 10, 'month' => 7, 'year' => 4][Http::query('period') ?? 'day'] ?? 10;
+        $circuits = array_values(array_filter(Metrics::all(), function (array $m): bool {
+            return $m['source'] === 'shelly' && $m['energy_factor'] !== null && $m['visible'];
+        }));
+        $total = Metrics::find(self::TOTAL);
+        $ids = array_map(function (array $m): int {
+            return $m['id'];
+        }, $circuits);
+        if ($total !== null) {
+            $ids[] = $total['id'];
+        }
+        $codeById = [];
+        foreach ($circuits as $m) {
+            $codeById[$m['id']] = $m['code'];
+        }
+        $rows = [];
+        if ($ids) {
+            $place = implode(',', array_fill(0, count($ids), '?'));
+            $data = Db::all(
+                "SELECT metric_id, LEFT(day, $length) AS p, SUM(energy_wh) AS wh, SUM(n) AS n FROM sample_daily
+                  WHERE metric_id IN ($place) AND day BETWEEN ? AND ? GROUP BY metric_id, p ORDER BY p",
+                array_merge($ids, [$from, $to])
+            );
+            foreach ($data as $r) {
+                $p = $r['p'];
+                if (!isset($rows[$p])) {
+                    $rows[$p] = ['period' => $p, 'total' => null, 'circuits' => [], 'n_total' => 0, 'n_circuits' => 0];
+                }
+                $kwh = round((float) $r['wh'] / 1000, 3);
+                if ($total !== null && (int) $r['metric_id'] === $total['id']) {
+                    $rows[$p]['total'] = $kwh;
+                    $rows[$p]['n_total'] = (int) $r['n'];
+                } else {
+                    $rows[$p]['circuits'][$codeById[(int) $r['metric_id']]] = $kwh;
+                    $rows[$p]['n_circuits'] = max($rows[$p]['n_circuits'], (int) $r['n']);
+                }
+            }
+        }
+        foreach ($rows as &$row) {
+            $sum = array_sum($row['circuits']);
+            $row['rest'] = $row['total'] === null ? null : round(max(0, $row['total'] - $sum), 3);
+            // Part de la période où les Shelly répondaient (relevés circuits / relevés Linky).
+            $row['coverage'] = $row['n_total'] > 0 ? round(min(1, $row['n_circuits'] / $row['n_total']), 2) : null;
+            unset($row['n_total'], $row['n_circuits']);
+        }
+        unset($row);
+        Http::json(200, [
+            'from' => $from, 'to' => $to,
+            'circuits' => array_map(function (array $m): array {
+                return ['code' => $m['code'], 'label' => $m['label']];
+            }, $circuits),
+            'rows' => array_values($rows),
+        ]);
+    }
+
+    /** GET /api/v1/profile?from&to : puissance moyenne (kW) par heure locale de la journée. */
+    public static function profile(): void
+    {
+        if (!Auth::requireRead()) {
+            return;
+        }
+        [$from, $to] = self::dayRange(30);
+        $total = Metrics::find(self::TOTAL);
+        $sum = array_fill(0, 24, 0.0);
+        $count = array_fill(0, 24, 0);
+        if ($total !== null) {
+            $start = (int) Time::parseBound($from, false);
+            $end = (int) Time::parseBound($to, true);
+            $tz = Config::timezone();
+            foreach (Db::all('SELECT hour, energy_wh FROM sample_hourly WHERE metric_id = ? AND hour >= ? AND hour < ? AND energy_wh > 0',
+                [$total['id'], Time::toDb($start), Time::toDb($end)]) as $r) {
+                $h = (int) (new \DateTimeImmutable('@' . Time::fromDb($r['hour'])))->setTimezone($tz)->format('G');
+                $sum[$h] += (float) $r['energy_wh'];
+                $count[$h]++;
+            }
+        }
+        $kw = [];
+        for ($h = 0; $h < 24; $h++) {
+            $kw[] = $count[$h] ? round($sum[$h] / $count[$h] / 1000, 3) : null;
+        }
+        Http::json(200, ['from' => $from, 'to' => $to, 'kw' => $kw]);
+    }
+
+    /** GET /api/v1/ecs : activations de la résistance d'appoint ECS. */
+    public static function ecs(): void
+    {
+        if (!Auth::requireRead()) {
+            return;
+        }
+        $episodes = Ecs::episodes();
+        $byYear = [];
+        $kwh = 0.0;
+        foreach ($episodes as $e) {
+            $y = substr(Time::localDate((int) Time::parse($e['start'])), 0, 4);
+            $byYear[$y] = ($byYear[$y] ?? 0) + 1;
+            $kwh += $e['kwh'];
+        }
+        ksort($byYear);
+        $first = Db::one('SELECT MIN(day) AS d FROM sample_daily WHERE metric_id = (SELECT id FROM metric WHERE code = ?)', [Ecs::METRIC]);
+        Http::json(200, [
+            'threshold_w' => Settings::int('ecs_threshold_w', 500),
+            'since' => $first['d'] ?? null,
+            'count' => count($episodes),
+            'kwh' => round($kwh, 2),
+            'cost_eur' => round($kwh * self::priceAt(Time::localDate(time())), 2),
+            'by_year' => $byYear,
+            'episodes' => $episodes,
+        ]);
+    }
+
+    /**
+     * GET /api/v1/compare : comparaisons entre années.
+     * - kWh et température extérieure moyenne par mois ;
+     * - un point par jour complet (température moyenne, kWh) pour la corrélation ;
+     * - degrés-jours unifiés et kWh par DJU, par saison de chauffe (octobre à avril).
+     */
+    public static function compare(): void
+    {
+        if (!Auth::requireRead()) {
+            return;
+        }
+        $total = Metrics::find(self::TOTAL);
+        $outdoor = Metrics::find('temp_outdoor');
+        $months = [];
+        $days = [];
+        if ($total !== null) {
+            foreach (Db::all('SELECT LEFT(day, 7) AS m, SUM(energy_wh) AS wh, COUNT(*) AS d FROM sample_daily WHERE metric_id = ? GROUP BY m ORDER BY m', [$total['id']]) as $r) {
+                $months[$r['m']]['kwh'] = round((float) $r['wh'] / 1000, 1);
+                $months[$r['m']]['days'] = (int) $r['d'];
+            }
+        }
+        if ($outdoor !== null) {
+            foreach (Db::all('SELECT LEFT(day, 7) AS m, SUM(v_sum) / SUM(n) AS t FROM sample_daily WHERE metric_id = ? AND n > 0 GROUP BY m ORDER BY m', [$outdoor['id']]) as $r) {
+                $months[$r['m']]['temp'] = round((float) $r['t'], 1);
+            }
+        }
+        if ($total !== null && $outdoor !== null) {
+            // Jour complet : au moins 250 relevés d'index sur 288 et 200 relevés de température.
+            $rows = Db::all(
+                'SELECT e.day, e.energy_wh, t.v_sum / t.n AS t
+                   FROM sample_daily e JOIN sample_daily t ON t.day = e.day AND t.metric_id = ?
+                  WHERE e.metric_id = ? AND e.n >= 250 AND t.n >= 200 AND e.energy_wh > 0
+                  ORDER BY e.day',
+                [$outdoor['id'], $total['id']]
+            );
+            foreach ($rows as $r) {
+                $days[] = [$r['day'], round((float) $r['t'], 2), round((float) $r['energy_wh'] / 1000, 2)];
+            }
+        }
+        $base = (float) Settings::get('heating_base_temp', '18');
+        $seasons = [];
+        foreach ($days as [$day, $t, $kwh]) {
+            $y = (int) substr($day, 0, 4);
+            $m = (int) substr($day, 5, 2);
+            if ($m >= 5 && $m <= 9) {
+                continue;
+            }
+            $key = $m >= 10 ? $y . '-' . ($y + 1) : ($y - 1) . '-' . $y;
+            if (!isset($seasons[$key])) {
+                $seasons[$key] = ['season' => $key, 'days' => 0, 'dju' => 0.0, 'kwh' => 0.0];
+            }
+            $seasons[$key]['days']++;
+            $seasons[$key]['dju'] += max(0, $base - $t);
+            $seasons[$key]['kwh'] += $kwh;
+        }
+        foreach ($seasons as &$s) {
+            $s['kwh_per_dju'] = $s['dju'] > 0 ? round($s['kwh'] / $s['dju'], 2) : null;
+            $s['dju'] = round($s['dju']);
+            $s['kwh'] = round($s['kwh']);
+        }
+        unset($s);
+        ksort($months);
+        $monthList = [];
+        foreach ($months as $m => $v) {
+            $monthList[] = ['month' => $m, 'kwh' => $v['kwh'] ?? null, 'days' => $v['days'] ?? 0, 'temp' => $v['temp'] ?? null];
+        }
+        Http::json(200, [
+            'base_temp' => $base,
+            'months' => $monthList,
+            'days' => $days,
+            'seasons' => array_values($seasons),
+        ]);
+    }
+
+    private static function energyBetween(int $metricId, int $from, int $to): ?float
+    {
+        // Heures entières, plus la fraction écoulée de l'heure entamée.
+        $lastHour = Time::hourStart($to);
+        $full = Db::one(
+            'SELECT SUM(energy_wh) AS wh, COUNT(*) AS c FROM sample_hourly WHERE metric_id = ? AND hour >= ? AND hour < ?',
+            [$metricId, Time::toDb($from), Time::toDb($lastHour)]
+        );
+        $partial = Db::one('SELECT energy_wh FROM sample_hourly WHERE metric_id = ? AND hour = ?', [$metricId, Time::toDb($lastHour)]);
+        if ((int) $full['c'] === 0 && $partial === null) {
+            return null;
+        }
+        $wh = (float) $full['wh'];
+        if ($partial !== null && $lastHour >= $from) {
+            $wh += (float) $partial['energy_wh'] * min(1, ($to - $lastHour) / 3600);
+        }
+        return round($wh / 1000, 2);
+    }
+
+    private static function priceAt(string $day): float
+    {
+        $row = Db::one('SELECT kwh_price FROM price WHERE valid_from <= ? ORDER BY valid_from DESC LIMIT 1', [$day]);
+        return $row === null ? 0.0 : (float) $row['kwh_price'];
+    }
+
+    /** @return array{0:string,1:string} dates locales incluses */
+    private static function dayRange(int $defaultDays): array
+    {
+        $to = Http::query('to');
+        $from = Http::query('from');
+        $re = '/^\d{4}-\d{2}-\d{2}$/';
+        $to = $to !== null && preg_match($re, $to) ? $to : Time::localDate(time());
+        $from = $from !== null && preg_match($re, $from) ? $from
+            : (new \DateTimeImmutable($to))->modify('-' . ($defaultDays - 1) . ' days')->format('Y-m-d');
+        return [$from, $to];
+    }
+}

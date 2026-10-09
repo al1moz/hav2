@@ -1,0 +1,110 @@
+# ConsoV2
+
+Nouveau site de suivi de consommation : API de réception des mesures (add-on Home Assistant)
+et pages du site (Aujourd'hui, Électricité, Chauffage, Températures, Humidité, Comparer, Administration). PHP 7.4 natif sans framework, MySQL 5.7.
+
+## Démarrer en local
+
+```sh
+cp .env.example .env        # puis remplacer chaque « a-remplacer »
+docker compose up -d --build
+```
+
+Au premier démarrage, MySQL crée la base `consov2` avec `sql/001_schema.sql` et `sql/002_seed.sql`.
+Le site répond sur http://127.0.0.1:8080 et MySQL sur 127.0.0.1:3307 (ports réglables avec `WEB_PORT` et `DB_LOCAL_PORT` dans `.env`).
+
+Puis, une fois la base prête :
+
+```sh
+docker compose exec php php bin/migrate.php    # applique les mises à jour de la base (à relancer après chaque mise à jour du code)
+docker compose exec php php bin/password.php   # mot de passe du site (12 caractères au moins)
+```
+
+Le site est entièrement privé : toutes les pages demandent ce mot de passe.
+
+Contrôles :
+
+```sh
+curl http://127.0.0.1:8080/api/v1/health
+docker compose exec php php tests/unit.php
+```
+
+## Jetons d'API
+
+```sh
+docker compose exec php php bin/token.php create addon-maison ingest   # pour l'add-on
+docker compose exec php php bin/token.php create lecture read          # pour lire les données
+docker compose exec php php bin/token.php list
+docker compose exec php php bin/token.php revoke <id>
+```
+
+Le jeton n'est affiché qu'une fois. Seule son empreinte SHA-256 est en base.
+Test de bout en bout : `INGEST=<jeton> READ=<jeton> sh tests/smoke.sh`.
+
+## Reprendre l'historique de l'ancien site
+
+En local, importer le dump dans une base `legacy`, puis lancer la migration
+(l'ancienne base n'est que lue) :
+
+```sh
+docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS legacy"'
+docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" legacy' < ../conso/conso-09-10-2026.sql
+docker compose exec php php bin/migrate-releve.php           # --reset pour recommencer
+```
+
+Environ 1 min 30 pour 420 000 relevés. Le script affiche à la fin la consommation par année
+pour la comparer à l'ancien site.
+
+## API v1
+
+| Route | Jeton | Rôle |
+|---|---|---|
+| `GET /api/v1/health` | aucun | test de disponibilité |
+| `POST /api/v1/measurements` | ingest | lot de mesures (voir ci-dessous) |
+| `GET /api/v1/metrics` | read | liste des mesures |
+| `GET /api/v1/latest` | read | dernières valeurs et état de chaque source (alerte d'absence de données) |
+| `GET /api/v1/series?metric=&from=&to=&step=raw\|hour\|day` | read | courbe |
+| `GET /api/v1/summary?metric=&period=day\|month\|year&from=&to=` | read | totaux, moyennes, coût |
+| `GET /api/v1/dashboard`, `breakdown`, `profile`, `ecs`, `compare` | read | données préparées pour les pages |
+
+Les routes de lecture acceptent aussi la session du site (utilisées par les pages).
+
+`from`/`to` : `AAAA-MM-JJ` (journée locale, bornes incluses) ou date ISO avec fuseau.
+
+Envoi d'un lot :
+
+```http
+POST /api/v1/measurements
+Authorization: Bearer <jeton ingest>
+Idempotency-Key: <identifiant unique du lot>
+
+{"measurements": [
+  {"metric": "elec_index", "value": 27363120, "unit": "Wh", "ts": "2026-10-09T16:20:00Z"},
+  {"metric": "circuit_geothermie", "value": 420, "ts": "2026-10-09T16:20:00Z"},
+  {"metric": "pac_temp_depart", "source": "arkteos", "unit": "°C", "value": 34.5, "ts": "2026-10-09T16:20:00Z"}
+]}
+```
+
+Réponse `202` : `{"accepted": 3, "duplicates": 0, "late": 0, "rejected": 0, "errors": []}`.
+
+- Une mesure inconnue est créée si `source` et `unit` sont fournis (`kind`: `gauge` par défaut, ou `counter` pour un index).
+- Une unité compatible est convertie (Wh vers kWh, kW vers W…).
+- Renvoyer un lot ne compte jamais deux fois : même clé, même réponse ; mêmes mesures, `duplicates`.
+- Un index incohérent (baisse, saut au-delà de 36 kW) est rejeté.
+- `401` jeton absent, `403` mauvaise portée, `422` corps invalide : l'add-on ne renvoie pas.
+  `5xx` ou réseau : l'add-on garde le lot et réessaie.
+
+## Organisation
+
+```
+public/index.php   seul fichier exposé : routes de l'API et des pages
+bootstrap.php      chargement automatique des classes de src/ et du .env
+src/               Config, Db, Router, Http, Auth, Session, Time, Units, Energy, Aggregates, Ingest, Ecs, View, Pages, Admin, Api/
+public/assets/     app.css (6 thèmes), charts.js (graphiques SVG), app.js (remplissage des pages)
+sql/               schéma et données de départ
+bin/               migrate.php, password.php, token.php, migrate-releve.php
+tests/             unit.php (calculs), smoke.sh (API de bout en bout)
+docker/            image php:7.4-fpm et configuration nginx
+```
+
+Les dates sont stockées en UTC. Les journées (`sample_daily`) suivent `APP_TIMEZONE`.
