@@ -33,7 +33,7 @@
     if (s < 86400) { const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h + ' h' + (m ? ' ' + String(m).padStart(2, '0') : ''); }
     return Math.round(s / 86400) + ' j';
   }
-  const SOURCES = { linky: 'Linky', shelly: 'Shelly (circuits)', sonde: 'Sondes de température', arkteos: 'PAC Arkteos', netatmo: 'Netatmo' };
+  const SOURCES = { linky: 'Linky', shelly: 'Shelly (circuits)', arkteos: 'PAC Arkteos', netatmo: 'Netatmo' };
   const srcName = s => SOURCES[s] || s;
   function tile(label, value, unit, delta, cls = '') {
     return `<div class="tile ${cls}"><div class="lbl">${esc(label)}</div><div class="big">${value}${unit ? `<small>${esc(unit)}</small>` : ''}</div>${delta ? `<div class="delta">${delta}</div>` : ''}</div>`;
@@ -130,6 +130,24 @@
       const [pac, ext] = await Promise.all([summaryDays('circuit_geothermie', from, to), summaryDays('temp_outdoor', from, to)]);
       line($('c-pac'), labels, [{ name: 'PAC', color: 'var(--s1)', values: days.map(d => pac[d] && pac[d].n >= 144 ? pac[d].energy_kwh : null) }], { w: 360, h: 190, unit: 'kWh', min: 0, area: true, aria: 'Consommation quotidienne de la PAC' });
       line($('c-ext'), labels, [{ name: 'Extérieur', color: 'var(--s2)', values: days.map(d => ext[d] ? ext[d].avg : null) }], { w: 360, h: 190, unit: '°C', aria: 'Température extérieure moyenne' });
+      if (water.length) {
+        const maps = await Promise.all(water.map(([code]) => summaryDays(code, from, to)));
+        const series = water.map(([, name, color], i) => ({ name, color, values: days.map(d => maps[i][d] ? maps[i][d].avg : null) }));
+        line($('c-water'), labels, series, { unit: '°C', aria: 'Températures d’eau moyennes par jour' });
+        $('lg-water').innerHTML = series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('');
+      }
+    }
+    // Températures d'eau de la PAC (Arkteos) : seulement les mesures déjà reçues.
+    const WATER = [['pac_primaire_temp_eau_aller', 'Départ', 'var(--s1)'], ['pac_primaire_temp_eau_retour', 'Retour', 'var(--s3)'],
+      ['pac_ecs_temp_eau_milieu', 'Ballon milieu', 'var(--s2)'], ['pac_ecs_temp_eau_bas', 'Ballon bas', 'var(--s4)']];
+    const L = (await api('dashboard')).latest;
+    const water = WATER.filter(([code]) => L[code]);
+    if (water.length) {
+      const newest = water.map(([code]) => L[code].ts).sort().pop();
+      $('pac-cap').textContent = `Moyenne par jour. Dernière lecture il y a ${ago(newest)}.`;
+      const tiles = water.map(([code, name]) => tile(name, fmt(L[code].value), '°C'));
+      if (L.pac_primaire_pression) tiles.push(tile('Pression primaire', fmt(L.pac_primaire_pression.value, 1), 'bar'));
+      $('pac-tiles').innerHTML = tiles.join('');
     }
     onControls('heat-ctl', ds => load(+ds.d).catch(failed($('c-pac'))));
     const [, e] = await Promise.all([load(30), api('ecs')]);

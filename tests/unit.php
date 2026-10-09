@@ -42,6 +42,13 @@ $check('index x1000 écarté', !Energy::counterPlausible($h, 17667.9, $h + 300, 
 $check('index tronqué écarté', !Energy::counterPlausible($h, 24871.8, $h + 300, 3916.9, 1000.0, 36000.0, 62 * 86400));
 $check('trou de 24 jours accepté', Energy::counterPlausible($h, 15000.0, $h + 24 * 86400, 15811.0, 1000.0, 36000.0, 62 * 86400));
 
+// Compteur remplacé : le premier index refusé est confirmé par le suivant, une erreur isolée ne l'est jamais.
+$candidate = ['ts' => $h + 300, 'value' => 12.5];
+$check('nouvelle base confirmée', Energy::confirmsCandidate($candidate, $h + 600, 12.6, 1000.0, 36000.0));
+$check('erreur isolée non confirmée', !Energy::confirmsCandidate(['ts' => $h + 300, 'value' => 17679996.0], $h + 600, 17668.2, 1000.0, 36000.0));
+$check('candidat trop ancien ignoré', !Energy::confirmsCandidate($candidate, $h + 7 * 3600, 12.6, 1000.0, 36000.0));
+$check('sans candidat rien à confirmer', !Energy::confirmsCandidate(null, $h + 600, 12.6, 1000.0, 36000.0));
+
 $check('Wh -> kWh', $near((float) Units::factor('Wh', 'kWh'), 0.001));
 $check('W et °C incompatibles', Units::factor('W', '°C') === null);
 

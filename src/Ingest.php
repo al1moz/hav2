@@ -93,6 +93,7 @@ final class Ingest
         $accepted = 0;
         $duplicates = 0;
         $late = 0;
+        $rebased = 0;
 
         foreach ($valid as $item) {
             $metric = self::resolveMetric($item);
@@ -114,8 +115,17 @@ final class Ingest
             $prev = $latest[$id];
             if ($metric['kind'] === 'counter' && $metric['energy_factor'] !== null && $prev !== null && $ts > $prev['ts']
                 && !Energy::counterPlausible($prev['ts'], $prev['value'], $ts, $value, $metric['energy_factor'], $counterMaxPower, $counterGap)) {
-                $rejected[] = ['index' => $item['_index'], 'reason' => 'index incohérent avec le précédent (baisse ou saut impossible)'];
-                continue;
+                $candidate = self::candidate($id);
+                if (!Energy::confirmsCandidate($candidate, $ts, $value, $metric['energy_factor'], $counterMaxPower)) {
+                    self::setCandidate($id, ['ts' => $ts, 'value' => $value]);
+                    $rejected[] = ['index' => $item['_index'], 'reason' => 'index incohérent avec le précédent (baisse ou saut impossible) ; '
+                        . 'mis de côté, il deviendra la nouvelle base si le suivant le confirme'];
+                    continue;
+                }
+                // Deux index cohérents entre eux : compteur changé ou remis à zéro, on repart de là.
+                $prev = $candidate;
+                self::setCandidate($id, null);
+                $rebased++;
             }
 
             $insert->execute([$id, Time::toDb($ts), $value]);
@@ -159,9 +169,31 @@ final class Ingest
             'accepted' => $accepted,
             'duplicates' => $duplicates,
             'late' => $late,
+            'rebased' => $rebased,
             'rejected' => count($rejected),
             'errors' => array_slice($rejected, 0, 50),
         ];
+    }
+
+    /** @return array{ts:int,value:float}|null index mis de côté pour cette grandeur */
+    private static function candidate(int $metricId): ?array
+    {
+        $row = Db::one('SELECT value FROM setting WHERE name = ?', ['counter_candidate_' . $metricId]);
+        $data = $row === null ? null : json_decode((string) $row['value'], true);
+        return is_array($data) && isset($data['ts'], $data['value']) ? ['ts' => (int) $data['ts'], 'value' => (float) $data['value']] : null;
+    }
+
+    /** @param array{ts:int,value:float}|null $candidate */
+    private static function setCandidate(int $metricId, ?array $candidate): void
+    {
+        if ($candidate === null) {
+            Db::run('DELETE FROM setting WHERE name = ?', ['counter_candidate_' . $metricId]);
+            return;
+        }
+        Db::run(
+            'INSERT INTO setting (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)',
+            ['counter_candidate_' . $metricId, json_encode($candidate)]
+        );
     }
 
     /** @param mixed $item */
