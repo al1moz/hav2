@@ -59,6 +59,27 @@ final class Admin
                 ]);
                 return 'Réglages de la tablette enregistrés.';
 
+            case 'chat':
+                $limit = (int) ($post['chat_daily_limit'] ?? 0);
+                $effort = (string) ($post['chat_effort'] ?? '');
+                $context = trim(str_replace("\r\n", "\n", (string) ($post['chat_context'] ?? '')));
+                if ($limit < 1 || $limit > 500) {
+                    return 'Questions par jour : de 1 à 500.';
+                }
+                if (!isset(Chat::EFFORTS[$effort])) {
+                    return 'Niveau de réflexion inconnu.';
+                }
+                if (mb_strlen($context) > 4000) {
+                    return 'Contexte : 4000 caractères au plus.';
+                }
+                self::set([
+                    'chat_enabled' => isset($post['chat_enabled']) ? '1' : '0',
+                    'chat_daily_limit' => (string) $limit,
+                    'chat_effort' => $effort,
+                    'chat_context' => $context,
+                ]);
+                return 'Réglages de la discussion enregistrés.';
+
             case 'price_add':
                 $from = (string) ($post['valid_from'] ?? '');
                 $price = str_replace(',', '.', (string) ($post['kwh_price'] ?? ''));
@@ -97,7 +118,7 @@ final class Admin
                 if (in_array('tablet', $scopes, true)) {
                     $host = preg_replace('/[^A-Za-z0-9.:-]/', '', (string) ($_SERVER['HTTP_HOST'] ?? ''));
                     $message .= "\n\nSur la tablette, ouvre une fois cette adresse (elle garde ensuite le jeton) :\n"
-                        . (Session::isHttps() ? 'https' : 'http') . '://' . $host . Tablet::path() . '?jeton=' . $token;
+                        . (Session::isHttps() ? 'https' : 'http') . '://' . $host . '/tablette?jeton=' . $token;
                 }
                 return $message;
 
@@ -160,7 +181,7 @@ final class Admin
                 . '<span>' . $h($label) . '</span><small>' . $h($desc) . '</small></label>';
         }
         $out .= '<section class="panel"><h2>Tablette</h2><p class="note">La page <a href="' . $h(Tablet::path()) . '">' . $h(Tablet::path()) . '</a> : horloge, sondes Netatmo, METAR et webcam en fond. '
-            . 'La tablette s\'ouvre avec un jeton de portée « tablet » (section Jetons d\'API), sans donner accès au reste du site.</p>'
+            . (Tablet::path() !== '/tablette' ? 'L\'ancienne adresse s\'ouvre sans jeton ; /tablette demande' : 'La tablette s\'ouvre avec') . ' un jeton de portée « tablet » (section Jetons d\'API), sans donner accès au reste du site.</p>'
             . $form('tablet', '<div class="opts">' . $opts . '</div>'
                 . '<label class="check"><input type="checkbox" name="tablet_night"' . (Settings::get('tablet_night', '1') === '1' ? ' checked' : '') . '> Thème Nuit de 22 h à 7 h</label>'
                 . '<div class="fields">'
@@ -169,6 +190,9 @@ final class Admin
                 . self::field('tablet_runways', 'Orientation des pistes (degrés)', Settings::get('tablet_runways'), 'text', 'Ex. 070, 250. Sert à colorer le vent selon la piste la plus favorable.')
                 . '</div><button type="submit">Enregistrer</button>')
             . '</section>';
+
+        // Discussion avec Claude
+        $out .= '<section class="panel" id="chat-admin"><h2>Discussion avec Claude</h2>' . self::chatPanel($form) . '</section>';
 
         // Prix
         $rows = '';
@@ -219,6 +243,68 @@ final class Admin
             . self::field('confirm', 'Encore une fois', '', 'password', '', 'new-password')
             . '</div><button type="submit">Changer</button>') . '</section>';
 
+        return $out;
+    }
+
+    private static function chatPanel(callable $form): string
+    {
+        $h = [View::class, 'h'];
+        $key = Claude::apiKey() !== '';
+        $out = '<p class="note">Le bouton « Demander à Claude » en bas des pages envoie la question à l\'API d\'Anthropic (modèle '
+            . $h(Claude::model()) . '), qui lit les données avec des outils en lecture seule. '
+            . ($key ? 'Clé ANTHROPIC_API_KEY trouvée dans le .env.' : '<strong>Clé ANTHROPIC_API_KEY absente du .env : le bouton reste caché.</strong>')
+            . ' Si les filtres de sécurité d\'Anthropic refusaient une question, elle repasserait automatiquement sur un autre modèle Claude.</p>';
+        $effort = Settings::get('chat_effort', 'low');
+        $opts = '';
+        foreach (Chat::EFFORTS as $k => $label) {
+            $opts .= '<option value="' . $k . '"' . ($k === $effort ? ' selected' : '') . '>' . $h($label) . '</option>';
+        }
+        $out .= $form('chat',
+            '<label class="check"><input type="checkbox" name="chat_enabled"' . (Settings::get('chat_enabled', '1') === '1' ? ' checked' : '') . '> Bouton « Demander à Claude » affiché</label>'
+            . '<div class="fields">'
+            . self::field('chat_daily_limit', 'Questions par jour au plus', Settings::get('chat_daily_limit', '30'), 'number')
+            . '<div class="field"><label for="f-chat_effort">Réflexion</label><select id="f-chat_effort" name="chat_effort">' . $opts . '</select></div>'
+            . '</div>'
+            . '<div class="field"><label for="f-chat_context">Ce que Claude doit savoir sur la maison</label>'
+            . '<textarea id="f-chat_context" name="chat_context" rows="6" maxlength="4000">' . $h(Settings::get('chat_context')) . '</textarea>'
+            . '<small>Envoyé avec chaque question. Aucun nom de lieu, adresse ni coordonnée.</small></div>'
+            . '<button type="submit">Enregistrer</button>');
+
+        $tz = Config::timezone();
+        $midnight = (new \DateTimeImmutable('now', $tz))->setTime(0, 0);
+        $stats = Db::one(
+            'SELECT SUM(created_at >= ?) AS today, SUM(created_at >= ?) AS month, SUM(IF(created_at >= ?, cost_usd, 0)) AS month_cost,
+                    COUNT(*) AS total, SUM(cost_usd) AS total_cost FROM chat_log',
+            [Time::toDb($midnight->getTimestamp()), Time::toDb($midnight->modify('first day of this month')->getTimestamp()),
+                Time::toDb($midnight->modify('first day of this month')->getTimestamp())]
+        );
+        $usd = function ($v): string {
+            return number_format((float) $v, 2, ',', ' ') . ' $';
+        };
+        $out .= '<p class="note">Aujourd\'hui : ' . (int) $stats['today'] . ' question(s). Ce mois-ci : ' . (int) $stats['month'] . ', '
+            . $usd($stats['month_cost']) . '. Depuis le début : ' . (int) $stats['total'] . ', ' . $usd($stats['total_cost']) . ' (coût estimé de l\'API).</p>';
+        $rows = '';
+        $status = ['ok' => 'répondu', 'running' => 'en cours', 'error' => 'erreur', 'refusal' => 'refus', 'max_tokens' => 'coupée', 'steps' => 'trop d\'étapes', 'empty' => 'vide', 'abandon' => 'abandonnée'];
+        foreach (Db::all('SELECT * FROM chat_log ORDER BY id DESC LIMIT 30') as $r) {
+            $when = (new \DateTimeImmutable('@' . Time::fromDb($r['created_at'])))->setTimezone($tz)->format('d/m H:i');
+            $tools = json_decode((string) $r['tools'], true);
+            $detail = $r['answer'] !== null ? (string) $r['answer'] : (string) $r['error'];
+            if (is_array($tools) && $tools) {
+                $detail .= "\n\nOutils : " . implode(', ', array_map(function ($t): string {
+                    return (string) ($t['name'] ?? '?') . (isset($t['error']) ? ' (erreur)' : '');
+                }, $tools));
+            }
+            $rows .= '<tr><td>' . $h($when) . '</td><td class="q"><details><summary>' . $h(mb_strimwidth((string) $r['question'], 0, 70, '…')) . '</summary>'
+                . '<pre>' . $h($detail) . '</pre></details></td>'
+                . '<td>' . $h($status[$r['status']] ?? $r['status']) . '</td><td>' . (int) $r['turns'] . '</td>'
+                . '<td>' . number_format(((int) $r['input_tokens'] + (int) $r['cache_read_tokens'] + (int) $r['cache_write_tokens']) / 1000, 1, ',', ' ') . ' k / '
+                . number_format((int) $r['output_tokens'] / 1000, 1, ',', ' ') . ' k</td>'
+                . '<td>' . number_format((float) $r['cost_usd'], 3, ',', ' ') . ' $</td><td>' . number_format((int) $r['duration_ms'] / 1000, 0) . ' s</td></tr>';
+        }
+        if ($rows !== '') {
+            $out .= '<div class="tbl"><table class="chatlog"><tr><th>Date</th><th>Question</th><th>État</th><th>Appels</th><th>Jetons entrée / sortie</th><th>Coût</th><th>Durée</th></tr>'
+                . $rows . '</table></div>';
+        }
         return $out;
     }
 

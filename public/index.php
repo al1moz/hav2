@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Conso\Api;
+use Conso\Chat;
 use Conso\Config;
 use Conso\Http;
 use Conso\Pages;
@@ -31,6 +32,7 @@ $router->add('GET', '/api/v1/breakdown', [Api\Views::class, 'breakdown']);
 $router->add('GET', '/api/v1/profile', [Api\Views::class, 'profile']);
 $router->add('GET', '/api/v1/ecs', [Api\Views::class, 'ecs']);
 $router->add('GET', '/api/v1/compare', [Api\Views::class, 'compare']);
+$router->add('POST', '/api/v1/chat', [Chat::class, 'post']);
 
 // Pages du site (connexion obligatoire)
 $router->add('GET', '/connexion', [Pages::class, 'login']);

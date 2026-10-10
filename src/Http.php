@@ -6,9 +6,16 @@ namespace Conso;
 /** Petites aides pour lire la requête et répondre en JSON. */
 final class Http
 {
+    /** @var array{0:int,1:mixed}|null réponse retenue par capture() au lieu d'être envoyée */
+    private static $captured;
+
     /** @param mixed $data */
     public static function json(int $status, $data): void
     {
+        if (self::$captured !== null) {
+            self::$captured = [$status, $data];
+            return;
+        }
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
@@ -48,5 +55,30 @@ final class Http
         }
         $data = json_decode($raw, true);
         return json_last_error() === JSON_ERROR_NONE ? $data : null;
+    }
+
+    /**
+     * Appelle une route de lecture avec ces paramètres et renvoie [statut, données] sans rien envoyer
+     * (outils du chat). L'appelant a déjà vérifié la connexion.
+     * @param array<string,string> $query
+     * @return array{0:int,1:mixed}
+     */
+    public static function capture(callable $route, array $query): array
+    {
+        $saved = $_GET;
+        $_GET = $query;
+        self::$captured = [500, null];
+        try {
+            $route();
+            return self::$captured;
+        } finally {
+            self::$captured = null;
+            $_GET = $saved;
+        }
+    }
+
+    public static function capturing(): bool
+    {
+        return self::$captured !== null;
     }
 }

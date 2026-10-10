@@ -5,9 +5,9 @@ namespace Conso;
 
 /**
  * Page tablette (reprise de l'ancienne page « pi ») : horloge, sondes Netatmo,
- * METAR de l'aérodrome et webcam en fond. Ouverte par la session du site ou par
- * un jeton de portée « tablet » : passé une fois dans l'adresse (?jeton=…), il
- * est gardé dans un cookie qui n'ouvre que cette page.
+ * METAR de l'aérodrome et webcam en fond. L'ancienne adresse (TABLET_LEGACY_PATH) est
+ * publique ; /tablette s'ouvre par la session du site ou par un jeton de portée « tablet » :
+ * passé une fois dans l'adresse (?jeton=…), il est gardé dans un cookie qui n'ouvre que cette page.
  */
 final class Tablet
 {
@@ -34,12 +34,18 @@ final class Tablet
      */
     public static function paths(): array
     {
-        $paths = ['/tablette'];
+        $legacy = self::legacyPath();
+        return $legacy === null ? ['/tablette'] : ['/tablette', $legacy];
+    }
+
+    /** Ancienne adresse (TABLET_LEGACY_PATH), ouverte sans jeton à la demande d'Alain : la page n'a rien de confidentiel. */
+    private static function legacyPath(): ?string
+    {
         $legacy = trim((string) Config::get('TABLET_LEGACY_PATH', ''), '/');
-        if ($legacy !== '' && preg_match('#^[A-Za-z0-9._/-]+$#', $legacy) && strpos($legacy, '..') === false) {
-            $paths[] = '/' . $legacy;
+        if ($legacy === '' || !preg_match('#^[A-Za-z0-9._/-]+$#', $legacy) || strpos($legacy, '..') !== false) {
+            return null;
         }
-        return $paths;
+        return '/' . $legacy;
     }
 
     /** Adresse à ouvrir sur la tablette (l'ancienne si elle est définie). */
@@ -63,7 +69,9 @@ final class Tablet
             return;
         }
         $cookie = $_COOKIE[self::COOKIE] ?? '';
-        if (is_string($cookie) && $cookie !== '' && Auth::checkToken($cookie, 'tablet') !== null) {
+        if ($path === self::legacyPath()) {
+            // Adresse publique : ni jeton ni session (Home Assistant l'affiche dans un iframe).
+        } elseif (is_string($cookie) && $cookie !== '' && Auth::checkToken($cookie, 'tablet') !== null) {
             self::keep($cookie);
         } elseif (!Session::loggedIn()) {
             self::denied('Cette tablette n\'a pas encore de jeton.');
@@ -84,7 +92,9 @@ final class Tablet
         $now = new \DateTime('now', Config::timezone());
         header('Content-Type: text/html; charset=utf-8');
         header('Cache-Control: no-store');
-        header("Content-Security-Policy: default-src 'self'; img-src 'self' data:" . $origin . "; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+        // L'adresse publique peut s'afficher dans Home Assistant (iframe) : frame-ancestors l'emporte sur X-Frame-Options de nginx.
+        $frames = $path === self::legacyPath() ? '*' : "'none'";
+        header("Content-Security-Policy: default-src 'self'; img-src 'self' data:" . $origin . "; style-src 'self' 'unsafe-inline'; frame-ancestors " . $frames . "; base-uri 'none'; form-action 'self'");
         echo '<!doctype html><html lang="fr" data-theme="' . $theme . '"><head><meta charset="utf-8">'
             . '<meta name="viewport" content="width=device-width, initial-scale=1">'
             . '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">'
@@ -139,6 +149,13 @@ final class Tablet
                 $d = Metar::describe($m, Metar::runways(Settings::get('tablet_runways')));
                 $old = $d['obs'] !== null && $now - $d['obs'] > self::METAR_STALE_S ? ' stale' : '';
                 $cat = self::categoryLevel($d['category']);
+                // De nuit aéronautique, le vol VFR de jour n'est plus possible : « NUIT » remplace VFR et MVFR.
+                $condition = $d['category'];
+                $night = Metar::night($m, $now);
+                if ($night !== null && $night['night'] && ($cat === 'ok' || $cat === 'warn')) {
+                    $condition = 'NUIT';
+                    $cat = 'warn';
+                }
                 $metar = '<div class="box metar' . $old . '">'
                     . ($d['clouds'] ? '<div class="clouds">' . implode('<br>', array_map([View::class, 'h'], $d['clouds'])) . '</div>' : '')
                     . '<div class="raw ' . $cat . '">' . View::h($d['raw']) . '</div></div>';
@@ -160,8 +177,9 @@ final class Tablet
                         . '<div class="val2 ' . $lvl . '">' . $w['speed'] . ' kt</div>'
                         . ($notes ? '<div class="note ' . $lvl . '">' . View::h(implode(' · ', $notes)) . '</div>' : '') . '</div>';
                 }
-                if ($d['category'] !== null) {
-                    $right .= '<div class="box' . $old . '"><div class="lbl">Condition</div><div class="val ' . $cat . '">' . View::h($d['category']) . '</div></div>';
+                if ($condition !== null) {
+                    $change = $night === null ? '' : '<div class="note">' . ($night['night'] ? 'jour à ' : 'nuit à ') . self::clock($night['until']) . '</div>';
+                    $right .= '<div class="box' . $old . '"><div class="lbl">Condition</div><div class="val ' . $cat . '">' . View::h($condition) . '</div>' . $change . '</div>';
                 }
                 if ($d['qnh'] !== null) {
                     $right .= '<div class="box' . $old . '"><div class="lbl">QNH</div><div class="val p">' . $d['qnh'] . '<small> hPa</small></div></div>';
@@ -224,13 +242,18 @@ final class Tablet
         return $n < 0 ? '−' . abs($n) : (string) $n;
     }
 
+    private static function clock(int $ts): string
+    {
+        return (new \DateTime('@' . $ts))->setTimezone(Config::timezone())->format('H:i');
+    }
+
     private static function since(int $ts): string
     {
         $local = (new \DateTime('@' . $ts))->setTimezone(Config::timezone());
         return time() - $ts < 86400 ? 'à ' . $local->format('H:i') : 'le ' . $local->format('d/m');
     }
 
-    private static function frenchDate(\DateTime $d): string
+    public static function frenchDate(\DateTime $d): string
     {
         return self::DAYS[(int) $d->format('w')] . ' ' . $d->format('j') . ' ' . self::MONTHS[(int) $d->format('n') - 1];
     }

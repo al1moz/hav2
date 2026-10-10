@@ -151,6 +151,47 @@ final class Metar
         return $best;
     }
 
+    /**
+     * Nuit aéronautique à la station du METAR (lat et lon fournis par aviationweather.gov),
+     * ou null si la position manque.
+     * @param array<string,mixed> $m
+     * @return array{night:bool,until:int}|null
+     */
+    public static function night(array $m, int $now): ?array
+    {
+        if (!isset($m['lat'], $m['lon']) || !is_numeric($m['lat']) || !is_numeric($m['lon'])) {
+            return null;
+        }
+        return self::nightAt((float) $m['lat'], (float) $m['lon'], $now);
+    }
+
+    /**
+     * Nuit au sens de SERA : de la fin du crépuscule civil au début de l'aube civile.
+     * « until » est l'heure du prochain changement. Les jours voisins sont calculés aussi,
+     * car date_sun_info() choisit le jour selon le fuseau de PHP.
+     * @return array{night:bool,until:int}|null
+     */
+    public static function nightAt(float $lat, float $lon, int $now): ?array
+    {
+        $events = [];
+        foreach ([-86400, 0, 86400] as $shift) {
+            $sun = date_sun_info($now + $shift, $lat, $lon);
+            if (is_int($sun['civil_twilight_begin']) && is_int($sun['civil_twilight_end'])) {
+                $events[$sun['civil_twilight_begin']] = false;
+                $events[$sun['civil_twilight_end']] = true;
+            }
+        }
+        ksort($events);
+        $night = null;
+        foreach ($events as $ts => $startsNight) {
+            if ($ts > $now) {
+                return $night === null ? null : ['night' => $night, 'until' => $ts];
+            }
+            $night = $startsNight;
+        }
+        return null;
+    }
+
     /** Orientations en degrés à partir du réglage (« 070, 250 » ou numéros de piste « 07/25 »). @return int[] */
     public static function runways(string $setting): array
     {

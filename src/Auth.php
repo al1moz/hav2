@@ -72,6 +72,9 @@ final class Auth
      */
     public static function requireRead(): bool
     {
+        if (Http::capturing()) {
+            return true;
+        }
         if (Http::header('Authorization') === null && Session::loggedIn()) {
             return true;
         }

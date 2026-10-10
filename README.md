@@ -60,8 +60,25 @@ une fois sur la tablette l'adresse affichée (`/tablette?jeton=…`). Le jeton e
 qui n'ouvre que cette page ; le révoquer dans l'administration coupe l'accès.
 
 Si la tablette est déjà réglée sur une ancienne adresse, la mettre dans `.env` (`TABLET_LEGACY_PATH`) :
-la page y répond aussi. Le serveur web doit alors passer les adresses en `.php` au routeur
+la page y répond aussi, **sans jeton ni mot de passe**, et peut s'afficher dans un iframe (Home Assistant).
+Ne pas la diffuser. Le serveur web doit alors passer les adresses en `.php` au routeur
 (voir `docker/nginx/default.conf`).
+
+De nuit aéronautique (fin du crépuscule civil à l'aube civile, à la position de la station donnée
+par le METAR), la case Condition affiche « NUIT » au lieu de VFR, avec l'heure du prochain changement.
+
+## Demander à Claude
+
+Un bouton en bas de chaque page ouvre une discussion : Claude (API d'Anthropic, modèle `claude-opus-5-5`)
+lit les données avec des outils en lecture seule (`src/ChatTools.php`) puis répond en français.
+
+- Clé d'API dans `.env` : `ANTHROPIC_API_KEY=…`. Sans clé, le bouton n'apparaît pas.
+- Administration, section « Discussion avec Claude » : bouton affiché ou non, questions par jour,
+  niveau de réflexion, ce que Claude doit savoir sur la maison, journal des questions avec leur coût estimé.
+- Si les filtres de sécurité d'Anthropic refusaient une question, l'API la repasse sur un autre modèle
+  (`fallbacks: "default"`).
+- Une réponse peut demander plusieurs appels : nginx doit laisser 300 s à PHP (`fastcgi_read_timeout`,
+  voir `docker/nginx/default.conf`). Le site envoie une ligne vide toutes les 10 s pendant l'attente.
 
 ## Reprendre l'historique de l'ancien site
 
@@ -88,6 +105,7 @@ pour la comparer à l'ancien site.
 | `GET /api/v1/series?metric=&from=&to=&step=raw\|hour\|day` | read | courbe |
 | `GET /api/v1/summary?metric=&period=day\|month\|year&from=&to=` | read | totaux, moyennes, coût |
 | `GET /api/v1/dashboard`, `breakdown`, `profile`, `ecs`, `compare` | read | données préparées pour les pages |
+| `POST /api/v1/chat` | session + CSRF | question à Claude, réponse en lignes JSON |
 
 Les routes de lecture acceptent aussi la session du site (utilisées par les pages).
 
@@ -121,8 +139,8 @@ Réponse `202` : `{"accepted": 3, "duplicates": 0, "late": 0, "rejected": 0, "er
 ```
 public/index.php   seul fichier exposé : routes de l'API et des pages
 bootstrap.php      chargement automatique des classes de src/ et du .env
-src/               Config, Db, Router, Http, Auth, Session, Time, Units, Energy, Aggregates, Ingest, Ecs, View, Pages, Admin, Tablet, Metar, Api/
-public/assets/     app.css (6 thèmes), charts.js (graphiques SVG), app.js (remplissage des pages), tablet.css et tablet.js (page tablette), fonts/ (Orbitron, licence OFL)
+src/               Config, Db, Router, Http, Auth, Session, Time, Units, Energy, Aggregates, Ingest, Ecs, View, Pages, Admin, Tablet, Metar, Claude, Chat, ChatTools, Api/
+public/assets/     app.css (6 thèmes), charts.js (graphiques SVG), app.js (remplissage des pages), chat.js (Demander à Claude), tablet.css et tablet.js (page tablette), fonts/ (Orbitron, licence OFL)
 sql/               schéma et données de départ
 bin/               migrate.php, password.php, token.php, migrate-releve.php, fake-data.php
 tests/             unit.php (calculs), smoke.sh (API de bout en bout)

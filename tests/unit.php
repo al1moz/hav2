@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+use Conso\Chat;
+use Conso\ChatTools;
+use Conso\Claude;
 use Conso\Energy;
 use Conso\Metar;
 use Conso\Time;
@@ -81,7 +84,48 @@ $check('vent de travers 17 kt = limite pilote', Metar::wind(310, 20, [250])['lev
 $check('vent arrière 5 kt = hors limites', Metar::wind(70, 5, [250])['level'] === 'bad');
 $check('piste la plus favorable retenue', Metar::wind(70, 5, [70, 250])['level'] === 'ok');
 $check('sans piste, pas de couleur', Metar::wind(250, 13, [])['level'] === null);
+// Nuit aéronautique à l'équateur (0, 0) le 9 oct. 2026 : aube civile 05:23 UTC, fin du crépuscule 18:11 UTC.
+$day = Metar::nightAt(0.0, 0.0, Time::parse('2026-10-09T12:00:00Z'));
+$check('nuit : midi = jour, nuit vers 18:11', $day !== null && !$day['night'] && gmdate('H:i', $day['until']) === '18:11');
+$dusk = Metar::nightAt(0.0, 0.0, Time::parse('2026-10-09T18:05:00Z'));
+$check('nuit : après le coucher, pas encore la nuit', $dusk !== null && !$dusk['night']);
+$late = Metar::nightAt(0.0, 0.0, Time::parse('2026-10-09T23:30:00Z'));
+$check('nuit : 23:30 = nuit jusqu\'au lendemain', $late !== null && $late['night'] && gmdate('Y-m-d', $late['until']) === '2026-10-10');
+$early = Metar::nightAt(0.0, 0.0, Time::parse('2026-10-09T03:00:00Z'));
+$check('nuit : 03:00 = nuit jusqu\'à l\'aube', $early !== null && $early['night'] && gmdate('Y-m-d H:i', $early['until']) === '2026-10-09 05:23');
+$check('nuit : sans position, rien', Metar::night(['rawOb' => 'METAR'], time()) === null);
 $check('pistes en degrés ou en numéros', Metar::runways('07/25') === [70, 250] && Metar::runways('070, 250') === [70, 250] && Metar::runways('') === []);
+
+// Chat : outils, historique et réponses de l'API.
+$tools = ChatTools::definitions();
+$strict = true;
+foreach ($tools as $t) {
+    $schema = $t['input_schema'];
+    $props = array_keys((array) $schema['properties']);
+    $strict = $strict && $t['strict'] === true && $schema['additionalProperties'] === false && ($schema['required'] ?? []) === $props;
+}
+$check('outils : schémas stricts, tous les paramètres requis', $strict && count($tools) === 8);
+$check('outils : sans paramètre = objet vide en JSON', strpos(json_encode($tools[0]), '"properties":{}') !== false);
+$check('dates : période valide', ChatTools::range(['from' => '2026-01-01', 'to' => '2026-01-31'], 400) === ['2026-01-01', '2026-01-31']);
+$check('dates : format refusé', is_string(ChatTools::range(['from' => '2026-1-1', 'to' => '2026-01-31'], 400)));
+$check('dates : date impossible refusée', is_string(ChatTools::range(['from' => '2026-02-30', 'to' => '2026-03-01'], 400)));
+$check('dates : ordre inversé refusé', is_string(ChatTools::range(['from' => '2026-02-01', 'to' => '2026-01-01'], 400)));
+$check('dates : période trop longue', is_string(ChatTools::range(['from' => '2026-01-01', 'to' => '2026-01-17'], 16)));
+$hist = Chat::history([['q' => 'a', 'a' => 'b'], ['q' => '', 'a' => 'x'], ['q' => ['x'], 'a' => 'y'], 'n', ['q' => ' c ', 'a' => 'd']]);
+$check('historique : seuls les échanges complets en texte', $hist === [['a', 'b'], ['c', 'd']]);
+$check('historique : 6 échanges au plus', count(Chat::history(array_fill(0, 10, ['q' => 'q', 'a' => 'a']))) === 6);
+$resp = json_decode('{"content":[{"type":"text","text":"Avant"},{"type":"thinking","thinking":"","signature":"s"},{"type":"tool_use","id":"t1","name":"x","input":{}},'
+    . '{"type":"fallback","from":{"model":"a"},"to":{"model":"b"}},{"type":"thinking","thinking":"","signature":"s2"},{"type":"text","text":"Après"}]}');
+$kept = array_map(function ($b) { return $b->type; }, Claude::replayable($resp->content));
+$check('repli : réflexion et outils avant le bloc fallback retirés', $kept === ['text', 'fallback', 'thinking', 'text']);
+$check('repli : sans bloc fallback, contenu intact', Claude::replayable([$resp->content[1], $resp->content[2]]) === [$resp->content[1], $resp->content[2]]);
+$check('repli : {} reste un objet vide', json_encode(Claude::replayable($resp->content)[0]) === '{"type":"text","text":"Avant"}'
+    && strpos(json_encode($resp->content[2]), '"input":{}') !== false);
+$check('texte de la réponse', Claude::text($resp->content) === "Avant\n\nAprès");
+$usage = json_decode('{"input_tokens":10,"output_tokens":5,"iterations":[{"type":"message","input_tokens":100,"output_tokens":0},'
+    . '{"type":"fallback_message","input_tokens":10,"output_tokens":5,"cache_read_input_tokens":1000}]}');
+$check('jetons : toutes les tentatives comptées', Claude::tokens($usage) === ['in' => 110, 'out' => 5, 'cache_write' => 0, 'cache_read' => 1000]);
+$check('coût : 1 M en entrée + 1 M en sortie = 24 $', $near(Claude::cost(['in' => 1000000, 'out' => 1000000, 'cache_write' => 0, 'cache_read' => 0]), 24.0));
 
 echo $failures === 0 ? "\nTous les tests passent.\n" : "\n$failures test(s) en échec.\n";
 exit($failures === 0 ? 0 : 1);
