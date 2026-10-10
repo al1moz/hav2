@@ -72,6 +72,7 @@ final class Read
     /**
      * GET /api/v1/series?metric=code&from=…&to=…&step=raw|hour|day
      * from/to : AAAA-MM-JJ (journée locale) ou date ISO. step par défaut selon la durée.
+     * nonzero=1 : ignore les valeurs à 0 (consignes de la PAC, à 0 quand le chauffage est arrêté).
      */
     public static function series(): void
     {
@@ -87,10 +88,12 @@ final class Read
         $span = $to - $from;
         $step = Http::query('step') ?? ($span <= 2 * 86400 ? 'raw' : ($span <= 62 * 86400 ? 'hour' : 'day'));
         $id = $metric['id'];
+        $nonzero = Http::query('nonzero') === '1';
 
         if ($step === 'raw') {
             $rows = Db::all(
-                'SELECT ts, value FROM sample WHERE metric_id = ? AND ts >= ? AND ts < ? ORDER BY ts LIMIT ' . (self::RAW_LIMIT + 1),
+                'SELECT ts, value FROM sample WHERE metric_id = ? AND ts >= ? AND ts < ?' . ($nonzero ? ' AND value <> 0' : '')
+                . ' ORDER BY ts LIMIT ' . (self::RAW_LIMIT + 1),
                 [$id, Time::toDb($from), Time::toDb($to)]
             );
             if (count($rows) > self::RAW_LIMIT) {
@@ -103,7 +106,14 @@ final class Read
             Http::json(200, self::seriesHeader($metric, $step, $from, $to) + ['columns' => ['ts', 'value'], 'points' => $points]);
             return;
         }
-        if ($step === 'hour') {
+        if ($nonzero && ($step === 'hour' || $step === 'day')) {
+            $fromDay = Time::localDate($from);
+            $start = $step === 'hour' ? Time::hourStart($from) : (int) Time::parseBound($fromDay, false);
+            $rows = self::nonzeroRows($id, $start, $to, $step === 'day');
+            $key = function (string $b) use ($step): string {
+                return $step === 'hour' ? Time::iso((int) $b) : $b;
+            };
+        } elseif ($step === 'hour') {
             $rows = Db::all(
                 'SELECT hour AS b, n, v_sum, v_min, v_max, energy_wh FROM sample_hourly
                   WHERE metric_id = ? AND hour >= ? AND hour < ? ORDER BY hour',
@@ -162,11 +172,18 @@ final class Read
         }
         $fromDay = Time::localDate($from);
         $toDay = Time::localDate($to - 1);
-        $rows = Db::all(
-            'SELECT day, n, v_sum, v_min, v_max, energy_wh FROM sample_daily
-              WHERE metric_id = ? AND day BETWEEN ? AND ? ORDER BY day',
-            [$metric['id'], $fromDay, $toDay]
-        );
+        if (Http::query('nonzero') === '1') {
+            $rows = [];
+            foreach (self::nonzeroRows($metric['id'], (int) Time::parseBound($fromDay, false), $to, true) as $r) {
+                $rows[] = ['day' => $r['b']] + $r;
+            }
+        } else {
+            $rows = Db::all(
+                'SELECT day, n, v_sum, v_min, v_max, energy_wh FROM sample_daily
+                  WHERE metric_id = ? AND day BETWEEN ? AND ? ORDER BY day',
+                [$metric['id'], $fromDay, $toDay]
+            );
+        }
         $prices = Db::all('SELECT valid_from, kwh_price FROM price ORDER BY valid_from');
         $hasEnergy = $metric['energy_factor'] !== null;
         $groups = [];
@@ -209,6 +226,33 @@ final class Read
             'metric' => $metric['code'], 'unit' => $metric['unit'], 'period' => $period,
             'from' => $fromDay, 'to' => $toDay, 'rows' => $out,
         ]);
+    }
+
+    /**
+     * Agrégats par heure UTC (b = horodatage) ou par journée locale (b = AAAA-MM-JJ), calculés
+     * sur les mesures brutes en ignorant les valeurs à 0. Pas d'énergie (grandeurs seulement).
+     * @return array<int,array{b:string,n:int,v_sum:float,v_min:float,v_max:float,energy_wh:float}>
+     */
+    private static function nonzeroRows(int $id, int $from, int $to, bool $daily): array
+    {
+        $hours = Db::all(
+            "SELECT DATE_FORMAT(ts, '%Y-%m-%d %H:00:00') AS h, COUNT(*) AS n, SUM(value) AS s, MIN(value) AS lo, MAX(value) AS hi
+               FROM sample WHERE metric_id = ? AND ts >= ? AND ts < ? AND value <> 0 GROUP BY h ORDER BY h",
+            [$id, Time::toDb($from), Time::toDb($to)]
+        );
+        $out = [];
+        foreach ($hours as $r) {
+            $ts = Time::fromDb($r['h']);
+            $b = $daily ? Time::localDate($ts) : (string) $ts;
+            if (!isset($out[$b])) {
+                $out[$b] = ['b' => $b, 'n' => 0, 'v_sum' => 0.0, 'v_min' => (float) $r['lo'], 'v_max' => (float) $r['hi'], 'energy_wh' => 0.0];
+            }
+            $out[$b]['n'] += (int) $r['n'];
+            $out[$b]['v_sum'] += (float) $r['s'];
+            $out[$b]['v_min'] = min($out[$b]['v_min'], (float) $r['lo']);
+            $out[$b]['v_max'] = max($out[$b]['v_max'], (float) $r['hi']);
+        }
+        return array_values($out);
     }
 
     /** @param array<int,array<string,mixed>> $prices */

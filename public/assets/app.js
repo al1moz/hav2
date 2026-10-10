@@ -77,13 +77,14 @@
    * Valeurs d'une mesure alignées sur les créneaux de la période : get('avg' | 'min' | 'max' | 'kwh').
    * minN : relevés minimum par jour pour garder l'énergie d'un jour (jour incomplet = trou).
    */
-  async function fetchValues(metric, P, minN = 0) {
+  /** extra : paramètres de plus pour l'API, par exemple { nonzero: 1 } pour ignorer les valeurs à 0. */
+  async function fetchValues(metric, P, minN = 0, extra = {}) {
     const map = {};
     if (P.step === 'day') {
-      const r = await api('summary', { metric, period: 'day', from: P.from, to: P.to });
+      const r = await api('summary', Object.assign({ metric, period: 'day', from: P.from, to: P.to }, extra));
       if (r) r.rows.forEach(x => { map[x.period] = { avg: x.avg, min: x.min, max: x.max, kwh: x.n >= minN ? x.energy_kwh : null }; });
     } else {
-      const r = await api('series', { metric, step: P.step, from: P.from, to: P.to });
+      const r = await api('series', Object.assign({ metric, step: P.step, from: P.from, to: P.to }, extra));
       const step = P.step === 'raw' ? 300000 : 3600000;
       if (r) r.points.forEach(x => {
         const k = Math.floor(Date.parse(x[0]) / step) * step;
@@ -215,9 +216,10 @@
       line($('c-ext'), P.labels, extS, Object.assign({ w: 360, h: 190, unit: '°C', aria: 'Température extérieure moyenne' }, o));
       legend('lg-ext', extS.length > 1 ? extS : []);
       if (zones.length) {
-        const maps = await Promise.all(zones.map(([code]) => fetchValues(code, P)));
+        // Consigne à 0 = chauffage arrêté : ignorée, la ligne pointillée s'interrompt.
+        const maps = await Promise.all(zones.map(([code]) => fetchValues(code, P, 0, code.includes('consigne') ? { nonzero: 1 } : {})));
         const series = zones.map(([, name, color, dash], i) => ({ name, color, dash, values: maps[i]('avg') }));
-        $('zones-cap').textContent = `°C, ${P.per}. Température intérieure lue par la PAC (trait plein) et consigne (pointillés).`;
+        $('zones-cap').textContent = `°C, ${P.per}. Température intérieure lue par la PAC (trait plein) et consigne (pointillés, absente quand le chauffage est arrêté).`;
         line($('c-zones'), P.labels, series, Object.assign({ unit: '°C', aria: 'Zones de chauffage de la PAC' }, o));
         legend('lg-zones', series);
       }
@@ -242,6 +244,7 @@
     const L = (await api('dashboard')).latest;
     const ZONES = [['pac_zone1_temp_interieur', 'Zone 1', 'var(--s1)'], ['pac_zone1_consigne', 'Consigne zone 1', 'var(--s1)', '5 4'],
       ['pac_zone2_temp_interieur', 'Zone 2', 'var(--s2)'], ['pac_zone2_consigne', 'Consigne zone 2', 'var(--s2)', '5 4']];
+    const consigneNote = c => !c ? '' : c.value === 0 ? 'chauffage arrêté' : 'consigne ' + fmt(c.value) + ' °C';
     const PRESS = [['pac_primaire_pression', 'Primaire (dedans)', 'var(--s1)'], ['pac_externe_pression', 'Captage (dehors)', 'var(--s3)']];
     const water = WATER.filter(([code]) => L[code]);
     const zones = ZONES.filter(([code]) => L[code]), press = PRESS.filter(([code]) => L[code]);
@@ -249,7 +252,7 @@
     const newest = water.length ? water.map(([code]) => L[code].ts).sort().pop() : null;
     if (water.length) {
       const tiles = water.map(([code, name]) => tile(name, fmt(L[code].value), '°C'));
-      for (const [code, name] of ZONES) if (L[code] && !code.includes('consigne')) tiles.push(tile('Intérieur ' + name.toLowerCase(), fmt(L[code].value), '°C', L[code.replace('temp_interieur', 'consigne')] ? 'consigne ' + fmt(L[code.replace('temp_interieur', 'consigne')].value) + ' °C' : ''));
+      for (const [code, name] of ZONES) if (L[code] && !code.includes('consigne')) tiles.push(tile('Intérieur ' + name.toLowerCase(), fmt(L[code].value), '°C', consigneNote(L[code.replace('temp_interieur', 'consigne')])));
       for (const [code, name] of PRESS) if (L[code]) tiles.push(tile('Pression ' + name.toLowerCase(), fmt(L[code].value, 1), 'bar'));
       if (L.pac_exterieur_temp) tiles.push(tile('Sonde extérieure PAC', fmt(L.pac_exterieur_temp.value), '°C'));
       $('pac-tiles').innerHTML = tiles.join('');
