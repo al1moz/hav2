@@ -86,7 +86,7 @@ final class View
             }
             // Sur smartphone, les liens se replient derrière le bouton « burger » (public/assets/app.js).
             $nav = '<nav aria-label="Pages"><a class="brand" href="/" title="' . $site . '" aria-label="' . $site . ', page Aujourd\'hui">'
-                . '<svg viewBox="0 0 32 32" aria-hidden="true">' . self::logo() . '</svg></a>'
+                . '<svg viewBox="0 0 32 32" aria-hidden="true">' . self::logo() . '</svg><span class="brand-name" aria-hidden="true">' . $site . '</span></a>'
                 . '<button type="button" class="burger" aria-controls="navlinks" aria-expanded="false" aria-label="Menu"><span></span><span></span><span></span></button>'
                 . '<div class="navlinks" id="navlinks">' . $links
                 . '<form method="post" action="/deconnexion" class="logout"><input type="hidden" name="csrf" value="' . self::h(Session::csrf()) . '">'

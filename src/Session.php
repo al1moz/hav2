@@ -5,7 +5,7 @@ namespace Conso;
 
 /**
  * Connexion au site : un seul mot de passe (haché dans setting.password_hash),
- * session de 30 jours, jeton CSRF pour tous les formulaires.
+ * session de 30 jours après la dernière visite (rangée dans MySQL), jeton CSRF pour tous les formulaires.
  */
 final class Session
 {
@@ -28,7 +28,16 @@ final class Session
             'httponly' => true,
             'samesite' => 'Lax',
         ]);
+        if (SessionStore::available()) {
+            session_set_save_handler(new SessionStore(self::LIFETIME), true);
+        }
         session_start();
+        // Échéance glissante : chaque visite connectée repousse la fin du cookie de 30 jours.
+        if (!empty($_SESSION['auth']) && isset($_COOKIE['consov2'])) {
+            setcookie('consov2', session_id(), [
+                'expires' => time() + self::LIFETIME, 'path' => '/', 'secure' => self::isHttps(), 'httponly' => true, 'samesite' => 'Lax',
+            ]);
+        }
     }
 
     public static function loggedIn(): bool
