@@ -61,7 +61,7 @@ html[data-theme="clair"] .bad{color:#b91c1c}
 .veil{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;background-color:transparent}
 html[data-theme="nuit"] .veil{background-color:#0a0605}
 html[data-theme="encre"] .veil{background-color:#ecebe6}
-html[data-theme="lcd"] .veil{background-color:#9fb08a}
+html[data-theme="domotique"] .veil{background-color:#06080a}
 html[data-theme="jarvis"] .veil{background-color:#030a12}
 html[data-theme="ironman"] .veil{background-color:#0a0405}
 html[data-theme="hologramme"] .veil{background-color:#050716}
@@ -86,15 +86,15 @@ html[data-theme="encre"] .warn{color:#111;font-weight:bold}
 html[data-theme="encre"] .bad{color:#111;font-weight:bold;text-decoration:underline}
 html[data-theme="encre"] .offline{background:#ecebe6;color:#111;border:2px solid #111}
 
-/* LCD : afficheur vert rétro. */
-html[data-theme="lcd"] body{background-color:#9fb08a;color:#1d2615}
-html[data-theme="lcd"] .box{background-color:#a9ba93;border-color:#7f9070;border-radius:4px}
-html[data-theme="lcd"] .lbl{color:#3f4d33}
-html[data-theme="lcd"] .val,html[data-theme="lcd"] .val2,html[data-theme="lcd"] .clock,
-html[data-theme="lcd"] .pressure .val,html[data-theme="lcd"] .val.p,html[data-theme="lcd"] .ok{color:#1d2615;text-shadow:none}
-html[data-theme="lcd"] .warn{color:#1d2615;font-weight:bold}
-html[data-theme="lcd"] .bad{color:#1d2615;font-weight:bold;text-decoration:underline}
-html[data-theme="lcd"] .offline{background:#a9ba93;color:#1d2615}
+/* Domotique : verre fumé sombre, cadres blancs fins et arrondis, chiffres fins, accents cyan et orange. */
+html[data-theme="domotique"] body{color:#eef3f5;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+html[data-theme="domotique"] .box{background-color:rgba(14,18,22,.62);border:1px solid rgba(255,255,255,.8);border-radius:14px;box-shadow:0 .6em 1.6em rgba(0,0,0,.55)}
+html[data-theme="domotique"] .lbl{color:#a3b1b8;text-transform:uppercase;letter-spacing:.14em;font-size:.85em}
+html[data-theme="domotique"] .val,html[data-theme="domotique"] .val2,html[data-theme="domotique"] .clock{color:#eef3f5;font-weight:300;text-shadow:none}
+html[data-theme="domotique"] .pressure .val,html[data-theme="domotique"] .val.p{color:#3cc4e6}
+html[data-theme="domotique"] .warn{color:#f28a2e}
+html[data-theme="domotique"] .bad{color:#ff5a4a}
+html[data-theme="domotique"] .offline{background:rgba(14,18,22,.8);color:#f28a2e;border:1px solid rgba(255,255,255,.6)}
 
 /* Jarvis, Iron Man, Hologramme : cases teintées et lueurs, webcam gardée en fond. */
 html[data-theme="jarvis"] .box{background-color:rgba(3,16,28,.78);border-color:rgba(0,212,255,.45);border-radius:4px;box-shadow:0 0 .8em rgba(0,212,255,.35)}

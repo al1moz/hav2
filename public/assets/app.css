@@ -4,43 +4,40 @@
   --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --radius:10px;--numsize:1.9rem;
 }
-html[data-theme="clair"]{--absent:#e1e6e3;--bg:#f4f6f5;--panel:#fff;--fg:#17201d;--muted:#5d6a65;--faint:#8a9690;--line:#dde3e0;--grid:#eceff0;--accent:#1f7a5c;
+html[data-theme="clair"]{--absent:#e1e6e3;--bg:#f4f6f5;--panel:rgba(255,255,255,.8);--solid:#fff;--fg:#17201d;--muted:#5d6a65;--faint:#8a9690;--line:#dde3e0;--grid:#eceff0;--accent:#1f7a5c;
   --warn:#b45309;--warn-bg:#fdf3e4;--warn-line:#efc98f;--ok:#1f7a5c;
   --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#4a3aa7;--s8:#e34948;color-scheme:light}
-html[data-theme="sombre"]{--absent:#2c3632;--bg:#111614;--panel:#19201d;--fg:#e6ece9;--muted:#a3b0aa;--faint:#76847e;--line:#2c3632;--grid:#232c28;--accent:#5cc79f;
+html[data-theme="sombre"]{--absent:#2c3632;--bg:#111614;--panel:rgba(25,32,29,.7);--solid:#19201d;--fg:#e6ece9;--muted:#a3b0aa;--faint:#76847e;--line:#2c3632;--grid:#232c28;--accent:#5cc79f;
   --warn:#f0a35a;--warn-bg:#2a2016;--warn-line:#6b4a22;--ok:#5cc79f;
   --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#2f9e2f;--s7:#9085e9;--s8:#e66767;color-scheme:dark}
-html[data-theme="encre"]{--absent:#d6d5cf;--bg:#ecebe6;--panel:#ecebe6;--fg:#111;--muted:#3d3d3d;--faint:#6a6a6a;--line:#111;--grid:#c9c8c2;--accent:#111;
+html[data-theme="encre"]{--absent:#d6d5cf;--bg:#ecebe6;--panel:rgba(236,235,230,.92);--solid:#ecebe6;--fg:#111;--muted:#3d3d3d;--faint:#6a6a6a;--line:#111;--grid:#c9c8c2;--accent:#111;
   --warn:#111;--warn-bg:#ecebe6;--warn-line:#111;--ok:#111;--radius:0;
   --s1:#111;--s2:#555;--s3:#888;--s4:#2b2b2b;--s5:#9e9e9e;--s6:#444;--s7:#777;--s8:#bbb;color-scheme:light;
   --font-ui:Georgia,"Times New Roman",serif;--font-mono:Georgia,serif}
 html[data-theme="encre"] *{transition:none!important;animation:none!important;box-shadow:none!important}
-html[data-theme="lcd"]{--absent:#93a37e;--bg:#9fb08a;--panel:#a9ba93;--fg:#1d2615;--muted:#3f4d33;--faint:#56653f;--line:#7f9070;--grid:#93a37e;--accent:#1d2615;
-  --warn:#1d2615;--warn-bg:#b5c4a0;--warn-line:#1d2615;--ok:#1d2615;--radius:4px;--numsize:2.3rem;
-  --s1:#1d2615;--s2:#3f5a2a;--s3:#55703d;--s4:#2c3a20;--s5:#6d8754;--s6:#45592f;--s7:#344a24;--s8:#7c9562;color-scheme:light;--font-mono:ui-monospace,"Courier New",monospace}
-html[data-theme="nuit"]{--absent:#2a150d;--bg:#0a0605;--panel:#140b08;--fg:#ff9b5c;--muted:#b06a40;--faint:#7a4428;--line:#2a150d;--grid:#1f100a;--accent:#ff7a33;
+html[data-theme="domotique"]{--absent:rgba(255,255,255,.07);--bg:#06080a;--panel:rgba(5,9,12,.64);--solid:#12171b;--fg:#eef3f5;--muted:#a3b1b8;--faint:#6d7b83;
+  --line:rgba(255,255,255,.24);--grid:rgba(255,255,255,.09);--accent:#3cc4e6;--warn:#f28a2e;--warn-bg:rgba(90,40,8,.5);--warn-line:rgba(242,138,46,.6);--ok:#3cc4e6;--radius:14px;
+  --s1:#1fa8c9;--s2:#d9393b;--s3:#ffd36b;--s4:#8fd8ea;--s5:#f0913b;--s6:#eec9c3;--s7:#00837a;--s8:#2ec9b4;color-scheme:dark}
+html[data-theme="nuit"]{--absent:#2a150d;--bg:#0a0605;--panel:rgba(20,11,8,.72);--solid:#140b08;--fg:#ff9b5c;--muted:#b06a40;--faint:#7a4428;--line:#2a150d;--grid:#1f100a;--accent:#ff7a33;
   --warn:#ff5a2a;--warn-bg:#1f0c06;--warn-line:#5a2410;--ok:#ff9b5c;
   --s1:#ff9b5c;--s2:#d86226;--s3:#ffbf8a;--s4:#a3461b;--s5:#ff7a33;--s6:#e0a070;--s7:#c0582a;--s8:#ffd2ad;color-scheme:dark}
 
 /* Thèmes futuristes (interface tête haute) : variables, puis effets communs plus bas.
-   --glow : couleur de la lueur en r,g,b ; --solid : fond opaque pour les panneaux qui recouvrent la page. */
+   --glow : couleur de la lueur en r,g,b ; --solid : fond opaque pour ce qui recouvre la page. */
 @font-face{font-family:"Orbitron";font-style:normal;font-weight:400;font-display:swap;
   src:url("fonts/orbitron-latin-400-normal.woff2") format("woff2"),url("fonts/orbitron-latin-400-normal.woff") format("woff")}
-html[data-theme="jarvis"]{--absent:rgba(0,212,255,.10);--bg:#030a12;--panel:rgba(6,30,46,.72);--solid:#06182a;--fg:#d6f4ff;--muted:#86bed2;--faint:#527f92;
+html[data-theme="jarvis"]{--absent:rgba(0,212,255,.10);--bg:#030a12;--panel:rgba(4,22,36,.68);--solid:#06182a;--fg:#d6f4ff;--muted:#86bed2;--faint:#527f92;
   --line:rgba(0,212,255,.30);--grid:rgba(0,212,255,.10);--accent:#00d4ff;--glow:0,212,255;
   --warn:#ffb347;--warn-bg:rgba(70,38,0,.55);--warn-line:rgba(255,179,71,.55);--ok:#00d4ff;
-  --s1:#0897a9;--s2:#c96805;--s3:#5443db;--s4:#018c3f;--s5:#0065b0;--s6:#ba022f;--s7:#ec4cb3;--s8:#766202;color-scheme:dark;
-  --hud-bg:radial-gradient(ellipse 80% 50% at 50% -8%,rgba(0,212,255,.20),transparent 70%),radial-gradient(circle at 100% 100%,rgba(0,90,160,.18),transparent 45%)}
-html[data-theme="ironman"]{--absent:rgba(242,182,48,.10);--bg:#0a0405;--panel:rgba(34,10,12,.78);--solid:#1c0a0c;--fg:#f8ead0;--muted:#cfae80;--faint:#8c6b4b;
+  --s1:#00d4ff;--s2:#2f7dff;--s3:#ffb347;--s4:#00b39b;--s5:#c4f3ff;--s6:#e8457a;--s7:#00a8e0;--s8:#ff7a45;color-scheme:dark}
+html[data-theme="ironman"]{--absent:rgba(242,182,48,.10);--bg:#0a0405;--panel:rgba(30,8,10,.7);--solid:#1c0a0c;--fg:#f8ead0;--muted:#cfae80;--faint:#8c6b4b;
   --line:rgba(242,182,48,.32);--grid:rgba(242,182,48,.09);--accent:#f2b630;--glow:242,182,48;
   --warn:#ff6a3d;--warn-bg:rgba(90,16,10,.6);--warn-line:rgba(255,106,61,.6);--ok:#4fd8ff;
-  --s1:#bd8703;--s2:#b4025e;--s3:#9d5bf4;--s4:#008d24;--s5:#3e95fe;--s6:#ed3726;--s7:#0a96af;--s8:#676803;color-scheme:dark;
-  --hud-bg:radial-gradient(ellipse 70% 55% at 0% 0%,rgba(170,18,24,.38),transparent 70%),radial-gradient(circle at 92% 96%,rgba(79,216,255,.16),transparent 30%)}
-html[data-theme="hologramme"]{--absent:rgba(140,180,255,.10);--bg:#050716;--panel:rgba(120,160,255,.07);--solid:#0c1130;--fg:#e0eaff;--muted:#9aaedc;--faint:#63739f;
+  --s1:#f2b630;--s2:#c8202a;--s3:#c9ccd2;--s4:#2fa8d8;--s5:#ff7a1f;--s6:#4fd8ff;--s7:#ff3d2e;--s8:#ffe2a0;color-scheme:dark}
+html[data-theme="hologramme"]{--absent:rgba(140,180,255,.10);--bg:#050716;--panel:rgba(12,16,48,.66);--solid:#0c1130;--fg:#e0eaff;--muted:#9aaedc;--faint:#63739f;
   --line:rgba(140,180,255,.28);--grid:rgba(140,180,255,.10);--accent:#7cc7ff;--glow:124,199,255;
   --warn:#ffb86b;--warn-bg:rgba(80,46,10,.45);--warn-line:rgba(255,184,107,.5);--ok:#7cffc4;
-  --s1:#0098a4;--s2:#a24102;--s3:#0177cc;--s4:#7e5e01;--s5:#8a63fe;--s6:#008d24;--s7:#e152c9;--s8:#b9003d;color-scheme:dark;
-  --hud-bg:radial-gradient(ellipse 60% 45% at 15% 0%,rgba(150,90,255,.28),transparent 70%),radial-gradient(ellipse 60% 45% at 90% 100%,rgba(0,220,255,.20),transparent 70%)}
+  --s1:#7cc7ff;--s2:#c2407f;--s3:#7cffc4;--s4:#4a5cff;--s5:#e6dcff;--s6:#e64fd0;--s7:#ff8fb8;--s8:#a479ff;color-scheme:dark}
 
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:15px;line-height:1.5;padding:0 16px 48px}
@@ -179,20 +176,55 @@ select{padding:6px 9px;border-radius:6px;border:1px solid var(--line);background
 .chatlog summary{color:var(--fg)}
 .chatlog pre{white-space:pre-wrap;font-family:var(--font-ui);margin:6px 0 0;color:var(--muted);max-width:60ch}
 .chatlog th:nth-child(2){text-align:left}
+/* ---- Domotique : verre fumé sombre, cadres blancs fins et arrondis, accents cyan, orange et corail ---- */
+/* Fond : scène futuriste (img/domotique-fond.jpg, dessinée pour le site), vue au travers des panneaux translucides (opacité, sans flou).
+   Calque fixe plutôt que background-attachment:fixed, ignoré par Safari sur iPhone. */
+[data-theme="domotique"] body{background:#06080a}
+[data-theme="domotique"] body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:linear-gradient(rgba(3,5,7,.08),rgba(3,5,7,.3)),url("img/domotique-fond.jpg") center/cover no-repeat}
+[data-theme="domotique"] :is(.chartbox,.panel,.login-box){border:1.5px solid rgba(255,255,255,.8);
+  box-shadow:0 14px 34px -14px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.08)}
+[data-theme="domotique"] .tile{border-color:rgba(255,255,255,.5);border-radius:12px}
+[data-theme="domotique"] :is(.chartbox h3,.panel h2,h2.section){text-transform:uppercase;font-size:.8rem;font-weight:500;letter-spacing:.14em;color:var(--fg)}
+[data-theme="domotique"] h1{font-weight:300;letter-spacing:.04em}
+[data-theme="domotique"] .lbl{letter-spacing:.12em}
+[data-theme="domotique"] .big{font-family:var(--font-ui);font-weight:300;letter-spacing:.01em}
+[data-theme="domotique"] .tile .big small{color:var(--accent)}
+[data-theme="domotique"] nav{background:rgba(4,7,10,.97);border-bottom-color:rgba(255,255,255,.35)}
+[data-theme="domotique"] nav a[aria-current="page"]{color:var(--fg);border-bottom-color:var(--accent)}
+[data-theme="domotique"] .brand-name{font-weight:400;text-transform:uppercase;letter-spacing:.14em;font-size:1rem}
+[data-theme="domotique"] .controls button{background:transparent;border-color:rgba(255,255,255,.4);color:var(--muted)}
+[data-theme="domotique"] .controls button[aria-pressed="true"]{background:rgba(60,196,230,.18);border-color:var(--accent);color:var(--fg)}
+[data-theme="domotique"] :is(form button[type=submit]:not(.link),.chat-open,.msg.q){color:var(--solid)}
+[data-theme="domotique"] :is(.chat,.tip,.zoom-reset,.burger){background:var(--solid)}
+@media (max-width:1040px){[data-theme="domotique"] .navlinks{background:var(--solid)}}
+
+/* ---- Fond des autres thèmes : la scène de Domotique recolorée pour chacun (img/fond-<thème>.jpg, dessinée pour le site),
+   vue au travers des panneaux translucides (opacité, sans flou), sur un calque fixe comme pour Domotique. ---- */
+:is([data-theme="clair"],[data-theme="sombre"],[data-theme="encre"],[data-theme="nuit"],[data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:center/cover no-repeat}
+[data-theme="clair"] body::before{background-image:url("img/fond-clair.jpg")}
+[data-theme="sombre"] body::before{background-image:url("img/fond-sombre.jpg")}
+[data-theme="encre"] body::before{background-image:url("img/fond-encre.jpg")}
+[data-theme="nuit"] body::before{background-image:url("img/fond-nuit.jpg")}
+[data-theme="jarvis"] body::before{background-image:url("img/fond-jarvis.jpg")}
+[data-theme="ironman"] body::before{background-image:url("img/fond-ironman.jpg")}
+[data-theme="hologramme"] body::before{background-image:url("img/fond-hologramme.jpg")}
+/* Ce qui recouvre la page ou porte du texte sur un aplat reste opaque. */
+:is([data-theme="clair"],[data-theme="sombre"],[data-theme="encre"],[data-theme="nuit"],[data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(form button[type=submit]:not(.link),.chat-open,.msg.q,.alert .ico){color:var(--solid)}
+:is([data-theme="clair"],[data-theme="sombre"],[data-theme="encre"],[data-theme="nuit"]) .controls button[aria-pressed="true"]{color:var(--solid)}
+:is([data-theme="clair"],[data-theme="sombre"],[data-theme="encre"],[data-theme="nuit"]) :is(.chat,.tip,.zoom-reset,.burger){background:var(--solid)}
+
 /* ---- Effets des thèmes futuristes (Jarvis, Iron Man, Hologramme) ---- */
 html[data-theme="jarvis"],html[data-theme="ironman"],html[data-theme="hologramme"]{--numsize:1.75rem;--radius:4px}
-:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) body{
-  background:var(--hud-bg),linear-gradient(rgba(var(--glow),.045) 1px,transparent 1px) 0 0/44px 44px,linear-gradient(90deg,rgba(var(--glow),.045) 1px,transparent 1px) 0 0/44px 44px,var(--bg);
-  background-attachment:fixed}
 :is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(h1,h3,.lbl,.big,.panel h2,h2.section,.brand-name){font-family:"Orbitron",var(--font-ui);font-weight:400;letter-spacing:.06em}
 :is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) h1{text-transform:uppercase;letter-spacing:.12em;color:var(--accent);text-shadow:0 0 14px rgba(var(--glow),.55)}
 :is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.chartbox h3,h2.section){text-transform:uppercase;font-size:.82rem;letter-spacing:.14em;color:var(--accent)}
 :is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) .big{text-shadow:0 0 12px rgba(var(--glow),.55)}
-:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) nav{background:rgba(0,0,0,.35);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 1px 0 rgba(var(--glow),.35),0 8px 24px -12px rgba(var(--glow),.45)}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) nav{box-shadow:0 1px 0 rgba(var(--glow),.35),0 8px 24px -12px rgba(var(--glow),.45)}
 :is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) nav .brand svg{filter:drop-shadow(0 0 5px rgba(var(--glow),.75))}
 :is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) nav a[aria-current="page"]{color:var(--accent);text-shadow:0 0 8px rgba(var(--glow),.6)}
-/* Panneaux : verre teinté, lueur et équerres aux coins. */
-:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.tile,.chartbox,.panel,.login-box){position:relative;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+/* Panneaux : translucides (opacité, sans flou), lueur et équerres aux coins. */
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.tile,.chartbox,.panel,.login-box){position:relative;
   box-shadow:inset 0 0 24px rgba(var(--glow),.06),0 0 18px -6px rgba(var(--glow),.35)}
 :is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.tile,.chartbox,.panel,.login-box)::before,
 :is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.tile,.chartbox,.panel,.login-box)::after{content:"";position:absolute;width:14px;height:14px;pointer-events:none;border:2px solid var(--accent);filter:drop-shadow(0 0 4px rgba(var(--glow),.8))}
