@@ -129,7 +129,7 @@ function step(int $ts, int $ecsFrom, int $ecsTo): array
     $m['pac_zone1_consigne'] = ['arkteos', '°C', 20.0];
     $m['pac_zone2_consigne'] = ['arkteos', '°C', 19.0];
     $m['pac_primaire_pression'] = ['arkteos', 'bar', round(1.6 + 0.04 * wave($ts, 17), 2)];
-    $m['pac_externe_pression'] = ['arkteos', 'bar', round(1.9 + 0.04 * wave($ts, 18), 2)];
+    $m['pac_externe_pression'] = ['arkteos', 'bar', round(1.4 + 0.04 * wave($ts, 18), 2)];
     return $m;
 }
 

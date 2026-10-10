@@ -242,7 +242,7 @@
     const L = (await api('dashboard')).latest;
     const ZONES = [['pac_zone1_temp_interieur', 'Zone 1', 'var(--s1)'], ['pac_zone1_consigne', 'Consigne zone 1', 'var(--s1)', '5 4'],
       ['pac_zone2_temp_interieur', 'Zone 2', 'var(--s2)'], ['pac_zone2_consigne', 'Consigne zone 2', 'var(--s2)', '5 4']];
-    const PRESS = [['pac_primaire_pression', 'Primaire', 'var(--s1)'], ['pac_externe_pression', 'Extérieure (captage)', 'var(--s3)']];
+    const PRESS = [['pac_primaire_pression', 'Primaire (dedans)', 'var(--s1)'], ['pac_externe_pression', 'Captage (dehors)', 'var(--s3)']];
     const water = WATER.filter(([code]) => L[code]);
     const zones = ZONES.filter(([code]) => L[code]), press = PRESS.filter(([code]) => L[code]);
     $('zones-box').hidden = !zones.length; $('press-box').hidden = !press.length;
