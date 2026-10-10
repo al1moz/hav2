@@ -140,7 +140,7 @@ Réponse `202` : `{"accepted": 3, "duplicates": 0, "late": 0, "rejected": 0, "er
 public/index.php   seul fichier exposé : routes de l'API et des pages
 bootstrap.php      chargement automatique des classes de src/ et du .env
 src/               Config, Db, Router, Http, Auth, Session, Time, Units, Energy, Aggregates, Ingest, Ecs, View, Pages, Admin, Tablet, Metar, Claude, Chat, ChatTools, Api/
-public/assets/     app.css (6 thèmes), charts.js (graphiques SVG), app.js (remplissage des pages), chat.js (Demander à Claude), tablet.css et tablet.js (page tablette), fonts/ (Orbitron, licence OFL)
+public/assets/     app.css (8 thèmes), charts.js (graphiques SVG), app.js (remplissage des pages), chat.js (Demander à Claude), tablet.css et tablet.js (page tablette), fonts/ (Orbitron, licence OFL)
 sql/               schéma et données de départ
 bin/               migrate.php, password.php, token.php, migrate-releve.php, fake-data.php
 tests/             unit.php (calculs), smoke.sh (API de bout en bout)

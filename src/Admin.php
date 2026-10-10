@@ -50,12 +50,17 @@ final class Admin
                 if (mb_strlen($runways) > 40 || ($runways !== '' && !Metar::runways($runways))) {
                     return 'Pistes : orientations en degrés séparées par des virgules (ex. 070, 250).';
                 }
+                $veil = trim((string) ($post['tablet_veil'] ?? ''));
+                if (!preg_match('/^\d{1,2}$/', $veil) || (int) $veil > 90) {
+                    return 'Voile sur l\'image de fond : un pourcentage de 0 à 90.';
+                }
                 self::set([
                     'theme_tablet' => $theme,
                     'tablet_night' => isset($post['tablet_night']) ? '1' : '0',
                     'tablet_background' => $background,
                     'tablet_icao' => $icao,
                     'tablet_runways' => $runways,
+                    'tablet_veil' => (string) (int) $veil,
                 ]);
                 return 'Réglages de la tablette enregistrés.';
 
@@ -185,7 +190,8 @@ final class Admin
             . $form('tablet', '<div class="opts">' . $opts . '</div>'
                 . '<label class="check"><input type="checkbox" name="tablet_night"' . (Settings::get('tablet_night', '1') === '1' ? ' checked' : '') . '> Thème Nuit de 22 h à 7 h</label>'
                 . '<div class="fields">'
-                . self::field('tablet_background', 'Image de fond (webcam)', Settings::get('tablet_background'), 'text', 'Rechargée toutes les 5 minutes, visible avec les thèmes Clair et Sombre. Une adresse https, sinon la tablette la bloque.')
+                . self::field('tablet_background', 'Image de fond (webcam)', Settings::get('tablet_background'), 'text', 'Rechargée toutes les 5 minutes. Une adresse https, sinon la tablette la bloque.')
+                . self::field('tablet_veil', 'Voile du thème sur l\'image (%)', (string) Tablet::veil(), 'number', 'Couleur du fond du thème posée sur l\'image pour garder son style (sauf Clair et Sombre, qui montrent l\'image telle quelle). 0 : pas de voile.')
                 . self::field('tablet_icao', 'Aérodrome du METAR (code OACI)', Settings::get('tablet_icao'), 'text', 'Vide : pas de METAR.')
                 . self::field('tablet_runways', 'Orientation des pistes (degrés)', Settings::get('tablet_runways'), 'text', 'Ex. 070, 250. Sert à colorer le vent selon la piste la plus favorable.')
                 . '</div><button type="submit">Enregistrer</button>')

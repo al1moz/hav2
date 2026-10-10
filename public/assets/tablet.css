@@ -56,8 +56,15 @@ html[data-theme="clair"] .ok{color:#1d7a33}
 html[data-theme="clair"] .warn{color:#b45309}
 html[data-theme="clair"] .bad{color:#b91c1c}
 
-/* Les autres thèmes masquent la webcam. */
-html[data-theme="nuit"] body,html[data-theme="encre"] body,html[data-theme="lcd"] body,html[data-theme="contraste"] body{background-image:none!important}
+/* Voile : la couleur de fond du thème posée sur la webcam, opacité réglée dans l'admin (tablet_veil).
+   Clair et Sombre montrent l'image telle quelle. */
+.veil{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;background-color:transparent}
+html[data-theme="nuit"] .veil{background-color:#0a0605}
+html[data-theme="encre"] .veil{background-color:#ecebe6}
+html[data-theme="lcd"] .veil{background-color:#9fb08a}
+html[data-theme="jarvis"] .veil{background-color:#030a12}
+html[data-theme="ironman"] .veil{background-color:#0a0405}
+html[data-theme="hologramme"] .veil{background-color:#050716}
 
 /* Nuit : orange faible, rien de vif. */
 html[data-theme="nuit"] body{background-color:#0a0605;color:#b06a40}
@@ -89,12 +96,16 @@ html[data-theme="lcd"] .warn{color:#1d2615;font-weight:bold}
 html[data-theme="lcd"] .bad{color:#1d2615;font-weight:bold;text-decoration:underline}
 html[data-theme="lcd"] .offline{background:#a9ba93;color:#1d2615}
 
-/* Contraste élevé : lisible de loin. */
-html[data-theme="contraste"] body{background-color:#000;color:#fff}
-html[data-theme="contraste"] .box{background-color:#000;border-color:#fff}
-html[data-theme="contraste"] .lbl{color:#e6e6e6}
-html[data-theme="contraste"] .val,html[data-theme="contraste"] .val2,html[data-theme="contraste"] .clock{color:#fff;text-shadow:none}
-html[data-theme="contraste"] .pressure .val,html[data-theme="contraste"] .val.p{color:#00e5ff}
-html[data-theme="contraste"] .ok{color:#7dff5b}
-html[data-theme="contraste"] .warn{color:#ffd400}
-html[data-theme="contraste"] .bad{color:#ff4d4d}
+/* Jarvis, Iron Man, Hologramme : cases teintées et lueurs, webcam gardée en fond. */
+html[data-theme="jarvis"] .box{background-color:rgba(3,16,28,.78);border-color:rgba(0,212,255,.45);border-radius:4px;box-shadow:0 0 .8em rgba(0,212,255,.35)}
+html[data-theme="jarvis"] .lbl{color:#86bed2}
+html[data-theme="jarvis"] .val,html[data-theme="jarvis"] .val2,html[data-theme="jarvis"] .clock{color:#d6f4ff;text-shadow:0 0 .35em rgba(0,212,255,.8)}
+html[data-theme="jarvis"] .pressure .val,html[data-theme="jarvis"] .val.p{color:#00d4ff}
+html[data-theme="ironman"] .box{background-color:rgba(28,8,10,.8);border-color:rgba(242,182,48,.5);border-top-color:#c0141c;border-radius:4px;box-shadow:0 0 .8em rgba(242,182,48,.3)}
+html[data-theme="ironman"] .lbl{color:#cfae80}
+html[data-theme="ironman"] .val,html[data-theme="ironman"] .val2,html[data-theme="ironman"] .clock{color:#f8ead0;text-shadow:0 0 .35em rgba(242,182,48,.75)}
+html[data-theme="ironman"] .pressure .val,html[data-theme="ironman"] .val.p{color:#4fd8ff}
+html[data-theme="hologramme"] .box{background-color:rgba(12,17,48,.72);border-color:rgba(140,180,255,.45);border-radius:4px;box-shadow:0 0 .8em rgba(124,199,255,.35)}
+html[data-theme="hologramme"] .lbl{color:#9aaedc}
+html[data-theme="hologramme"] .val,html[data-theme="hologramme"] .val2,html[data-theme="hologramme"] .clock{color:#e0eaff;text-shadow:-1px 0 rgba(255,60,220,.5),1px 0 rgba(0,240,255,.5),0 0 .35em rgba(124,199,255,.7)}
+html[data-theme="hologramme"] .pressure .val,html[data-theme="hologramme"] .val.p{color:#7cc7ff}

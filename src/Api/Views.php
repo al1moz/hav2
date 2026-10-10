@@ -92,6 +92,7 @@ final class Views
 
     /**
      * GET /api/v1/breakdown?from=AAAA-MM-JJ&to=AAAA-MM-JJ&period=day|month|year
+     * ou period=hour avec from/to en date ISO (24 dernières heures par défaut).
      * kWh du compteur Linky et de chaque circuit mesuré, « reste » = Linky moins les circuits.
      */
     public static function breakdown(): void
@@ -99,7 +100,20 @@ final class Views
         if (!Auth::requireRead()) {
             return;
         }
-        [$from, $to] = self::dayRange(30);
+        $hourly = Http::query('period') === 'hour';
+        if ($hourly) {
+            // Heure par heure : from/to en date ISO (par défaut les 24 dernières heures), 8 jours au plus.
+            $toTs = Http::query('to') === null ? time() : Time::parseBound((string) Http::query('to'), true);
+            $fromTs = Http::query('from') === null ? ($toTs === null ? null : $toTs - 86400) : Time::parseBound((string) Http::query('from'), false);
+            if ($fromTs === null || $toTs === null || $fromTs >= $toTs || $toTs - $fromTs > 8 * 86400) {
+                Http::error(422, 'invalid_range', 'period=hour : from/to en date ISO, 8 jours au plus.');
+                return;
+            }
+            $from = Time::iso($fromTs);
+            $to = Time::iso($toTs);
+        } else {
+            [$from, $to] = self::dayRange(30);
+        }
         $length = ['day' => 10, 'month' => 7, 'year' => 4][Http::query('period') ?? 'day'] ?? 10;
         $circuits = array_values(array_filter(Metrics::all(), function (array $m): bool {
             return $m['source'] === 'shelly' && $m['energy_factor'] !== null && $m['visible'];
@@ -118,13 +132,21 @@ final class Views
         $rows = [];
         if ($ids) {
             $place = implode(',', array_fill(0, count($ids), '?'));
-            $data = Db::all(
-                "SELECT metric_id, LEFT(day, $length) AS p, SUM(energy_wh) AS wh, SUM(n) AS n FROM sample_daily
-                  WHERE metric_id IN ($place) AND day BETWEEN ? AND ? GROUP BY metric_id, p ORDER BY p",
-                array_merge($ids, [$from, $to])
-            );
+            if ($hourly) {
+                $data = Db::all(
+                    "SELECT metric_id, hour AS p, energy_wh AS wh, n FROM sample_hourly
+                      WHERE metric_id IN ($place) AND hour >= ? AND hour < ? ORDER BY hour",
+                    array_merge($ids, [Time::toDb(Time::hourStart((int) $fromTs)), Time::toDb((int) $toTs)])
+                );
+            } else {
+                $data = Db::all(
+                    "SELECT metric_id, LEFT(day, $length) AS p, SUM(energy_wh) AS wh, SUM(n) AS n FROM sample_daily
+                      WHERE metric_id IN ($place) AND day BETWEEN ? AND ? GROUP BY metric_id, p ORDER BY p",
+                    array_merge($ids, [$from, $to])
+                );
+            }
             foreach ($data as $r) {
-                $p = $r['p'];
+                $p = $hourly ? Time::iso(Time::fromDb($r['p'])) : $r['p'];
                 if (!isset($rows[$p])) {
                     $rows[$p] = ['period' => $p, 'total' => null, 'circuits' => [], 'n_total' => 0, 'n_circuits' => 0];
                 }

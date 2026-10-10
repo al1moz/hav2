@@ -99,9 +99,11 @@ final class Tablet
             . '<meta name="viewport" content="width=device-width, initial-scale=1">'
             . '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">'
             . '<title>' . View::h(Settings::get('site_name', 'Maison')) . '</title>'
+            . View::icon($theme)
             . '<link rel="stylesheet" href="/assets/tablet.css?v=' . $v . '">'
             . '<noscript><meta http-equiv="refresh" content="300"></noscript>'
             . '</head><body' . ($bg === '' ? '' : ' style="background-image:url(\'' . View::h($bg) . '\')"') . '>'
+            . '<div class="veil" id="veil" style="opacity:' . sprintf('%.2F', self::veil() / 100) . '"></div>'
             . self::panel()
             . '<div class="clock"><div class="time" id="time">' . $now->format('H:i') . '</div>'
             . '<div class="date" id="date">' . self::frenchDate($now) . '</div>'
@@ -187,7 +189,7 @@ final class Tablet
             }
         }
 
-        return '<div id="panel" data-theme="' . self::theme() . '" data-v="' . View::assetVersion() . '" data-bg="' . View::h(self::background()) . '">'
+        return '<div id="panel" data-theme="' . self::theme() . '" data-v="' . View::assetVersion() . '" data-bg="' . View::h(self::background()) . '" data-veil="' . sprintf('%.2F', self::veil() / 100) . '">'
             . ($left === '' ? '' : '<div class="col left">' . $left . '</div>')
             . $metar
             . ($right === '' ? '' : '<div class="col right">' . $right . '</div>')
@@ -208,6 +210,12 @@ final class Tablet
             }
         }
         return $theme;
+    }
+
+    /** Voile de la couleur du thème sur l'image de fond, en % (0 à 90, 50 par défaut). */
+    public static function veil(): int
+    {
+        return max(0, min(90, Settings::int('tablet_veil', 50)));
     }
 
     /** Adresse de l'image de fond (webcam), vide si absente ou invalide. */

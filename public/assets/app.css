@@ -21,20 +21,60 @@ html[data-theme="lcd"]{--absent:#93a37e;--bg:#9fb08a;--panel:#a9ba93;--fg:#1d261
 html[data-theme="nuit"]{--absent:#2a150d;--bg:#0a0605;--panel:#140b08;--fg:#ff9b5c;--muted:#b06a40;--faint:#7a4428;--line:#2a150d;--grid:#1f100a;--accent:#ff7a33;
   --warn:#ff5a2a;--warn-bg:#1f0c06;--warn-line:#5a2410;--ok:#ff9b5c;
   --s1:#ff9b5c;--s2:#d86226;--s3:#ffbf8a;--s4:#a3461b;--s5:#ff7a33;--s6:#e0a070;--s7:#c0582a;--s8:#ffd2ad;color-scheme:dark}
-html[data-theme="contraste"]{--absent:#3a3a3a;--bg:#000;--panel:#000;--fg:#fff;--muted:#e6e6e6;--faint:#bdbdbd;--line:#fff;--grid:#444;--accent:#ffd400;
-  --warn:#ffd400;--warn-bg:#000;--warn-line:#ffd400;--ok:#ffd400;--numsize:2.2rem;
-  --s1:#ffd400;--s2:#00e5ff;--s3:#ff5bd1;--s4:#7dff5b;--s5:#ff8a3d;--s6:#b39bff;--s7:#fff;--s8:#ff4d4d;color-scheme:dark}
+
+/* Thèmes futuristes (interface tête haute) : variables, puis effets communs plus bas.
+   --glow : couleur de la lueur en r,g,b ; --solid : fond opaque pour les panneaux qui recouvrent la page. */
+@font-face{font-family:"Orbitron";font-style:normal;font-weight:400;font-display:swap;
+  src:url("fonts/orbitron-latin-400-normal.woff2") format("woff2"),url("fonts/orbitron-latin-400-normal.woff") format("woff")}
+html[data-theme="jarvis"]{--absent:rgba(0,212,255,.10);--bg:#030a12;--panel:rgba(6,30,46,.72);--solid:#06182a;--fg:#d6f4ff;--muted:#86bed2;--faint:#527f92;
+  --line:rgba(0,212,255,.30);--grid:rgba(0,212,255,.10);--accent:#00d4ff;--glow:0,212,255;
+  --warn:#ffb347;--warn-bg:rgba(70,38,0,.55);--warn-line:rgba(255,179,71,.55);--ok:#00d4ff;
+  --s1:#0897a9;--s2:#c96805;--s3:#5443db;--s4:#018c3f;--s5:#0065b0;--s6:#ba022f;--s7:#ec4cb3;--s8:#766202;color-scheme:dark;
+  --hud-bg:radial-gradient(ellipse 80% 50% at 50% -8%,rgba(0,212,255,.20),transparent 70%),radial-gradient(circle at 100% 100%,rgba(0,90,160,.18),transparent 45%)}
+html[data-theme="ironman"]{--absent:rgba(242,182,48,.10);--bg:#0a0405;--panel:rgba(34,10,12,.78);--solid:#1c0a0c;--fg:#f8ead0;--muted:#cfae80;--faint:#8c6b4b;
+  --line:rgba(242,182,48,.32);--grid:rgba(242,182,48,.09);--accent:#f2b630;--glow:242,182,48;
+  --warn:#ff6a3d;--warn-bg:rgba(90,16,10,.6);--warn-line:rgba(255,106,61,.6);--ok:#4fd8ff;
+  --s1:#bd8703;--s2:#b4025e;--s3:#9d5bf4;--s4:#008d24;--s5:#3e95fe;--s6:#ed3726;--s7:#0a96af;--s8:#676803;color-scheme:dark;
+  --hud-bg:radial-gradient(ellipse 70% 55% at 0% 0%,rgba(170,18,24,.38),transparent 70%),radial-gradient(circle at 92% 96%,rgba(79,216,255,.16),transparent 30%)}
+html[data-theme="hologramme"]{--absent:rgba(140,180,255,.10);--bg:#050716;--panel:rgba(120,160,255,.07);--solid:#0c1130;--fg:#e0eaff;--muted:#9aaedc;--faint:#63739f;
+  --line:rgba(140,180,255,.28);--grid:rgba(140,180,255,.10);--accent:#7cc7ff;--glow:124,199,255;
+  --warn:#ffb86b;--warn-bg:rgba(80,46,10,.45);--warn-line:rgba(255,184,107,.5);--ok:#7cffc4;
+  --s1:#0098a4;--s2:#a24102;--s3:#0177cc;--s4:#7e5e01;--s5:#8a63fe;--s6:#008d24;--s7:#e152c9;--s8:#b9003d;color-scheme:dark;
+  --hud-bg:radial-gradient(ellipse 60% 45% at 15% 0%,rgba(150,90,255,.28),transparent 70%),radial-gradient(ellipse 60% 45% at 90% 100%,rgba(0,220,255,.20),transparent 70%)}
 
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:15px;line-height:1.5;padding:0 16px 48px}
 .shell{max-width:1100px;margin:0 auto}
 nav{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;gap:4px 18px;align-items:center;flex-wrap:wrap;padding-block:14px;border-bottom:1px solid var(--line);margin-bottom:22px}
-nav .brand{font-weight:600;margin-right:auto}
+nav .brand{margin-right:auto;display:block;color:var(--accent);border:0;padding:0;line-height:0}
+nav .brand svg{width:38px;height:38px;overflow:visible}
+nav .brand:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:6px}
 nav a{color:var(--muted);text-decoration:none;font-size:.93rem;padding:4px 0;border-bottom:2px solid transparent}
 nav a:hover,nav a:focus-visible,nav a[aria-current="page"]{color:var(--fg);border-bottom-color:var(--accent);outline:none}
 nav .logout button{font:inherit;font-size:.85rem;border:1px solid var(--line);border-radius:999px;padding:3px 12px;background:none;color:var(--fg);cursor:pointer}
+.navlinks{display:contents}
+.burger{display:none}
+@media (max-width:960px){
+  nav{flex-wrap:nowrap;padding-block:10px}
+  .burger{display:grid;gap:5px;align-content:center;width:42px;height:38px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);cursor:pointer}
+  .burger span{display:block;height:2px;border-radius:2px;background:currentColor;transition:transform .2s,opacity .2s}
+  nav.open .burger span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+  nav.open .burger span:nth-child(2){opacity:0}
+  nav.open .burger span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+  .navlinks{display:none;position:absolute;top:100%;left:-16px;right:-16px;flex-direction:column;align-items:stretch;padding:6px 16px 14px;background:var(--bg);border-bottom:1px solid var(--line);box-shadow:0 10px 24px rgba(0,0,0,.18)}
+  nav.open .navlinks{display:flex}
+  .navlinks a{font-size:1.05rem;padding:11px 4px;border-bottom:1px solid var(--line)}
+  .navlinks a[aria-current="page"]{border-bottom-color:var(--line);color:var(--accent);font-weight:600}
+  .navlinks .logout{margin-top:12px}
+  .navlinks .logout button{font-size:.95rem;padding:7px 16px}
+}
+.chartbox>div[id^="c-"]{position:relative}
+svg.zoomable{touch-action:pan-y;cursor:crosshair;-webkit-user-select:none;user-select:none}
+.zoom-sel{fill:var(--accent);fill-opacity:.15;stroke:var(--accent);stroke-opacity:.5}
+.zoom-reset{position:absolute;top:0;right:0;font:inherit;font-size:.78rem;padding:2px 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--fg);cursor:pointer}
 h1{font-size:1.45rem;margin:0 0 4px;font-weight:600}
 h2{font-size:1.1rem;margin:0 0 8px;font-weight:600}
+h2.section{margin:28px 0 10px}
 .sub{color:var(--muted);margin:0 0 16px;max-width:70ch}
 .note{color:var(--muted);font-size:.85rem;margin:10px 0}
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
@@ -138,3 +178,41 @@ select{padding:6px 9px;border-radius:6px;border:1px solid var(--line);background
 .chatlog summary{color:var(--fg)}
 .chatlog pre{white-space:pre-wrap;font-family:var(--font-ui);margin:6px 0 0;color:var(--muted);max-width:60ch}
 .chatlog th:nth-child(2){text-align:left}
+/* ---- Effets des thèmes futuristes (Jarvis, Iron Man, Hologramme) ---- */
+html[data-theme="jarvis"],html[data-theme="ironman"],html[data-theme="hologramme"]{--numsize:1.75rem;--radius:4px}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) body{
+  background:var(--hud-bg),linear-gradient(rgba(var(--glow),.045) 1px,transparent 1px) 0 0/44px 44px,linear-gradient(90deg,rgba(var(--glow),.045) 1px,transparent 1px) 0 0/44px 44px,var(--bg);
+  background-attachment:fixed}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(h1,h3,.lbl,.big,.panel h2,h2.section){font-family:"Orbitron",var(--font-ui);font-weight:400;letter-spacing:.06em}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) h1{text-transform:uppercase;letter-spacing:.12em;color:var(--accent);text-shadow:0 0 14px rgba(var(--glow),.55)}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.chartbox h3,h2.section){text-transform:uppercase;font-size:.82rem;letter-spacing:.14em;color:var(--accent)}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) .big{text-shadow:0 0 12px rgba(var(--glow),.55)}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) nav{background:rgba(0,0,0,.35);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 1px 0 rgba(var(--glow),.35),0 8px 24px -12px rgba(var(--glow),.45)}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) nav .brand svg{filter:drop-shadow(0 0 5px rgba(var(--glow),.75))}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) nav a[aria-current="page"]{color:var(--accent);text-shadow:0 0 8px rgba(var(--glow),.6)}
+/* Panneaux : verre teinté, lueur et équerres aux coins. */
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.tile,.chartbox,.panel,.login-box){position:relative;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  box-shadow:inset 0 0 24px rgba(var(--glow),.06),0 0 18px -6px rgba(var(--glow),.35)}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.tile,.chartbox,.panel,.login-box)::before,
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.tile,.chartbox,.panel,.login-box)::after{content:"";position:absolute;width:14px;height:14px;pointer-events:none;border:2px solid var(--accent);filter:drop-shadow(0 0 4px rgba(var(--glow),.8))}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.tile,.chartbox,.panel,.login-box)::before{top:-1px;left:-1px;border-right:0;border-bottom:0}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.tile,.chartbox,.panel,.login-box)::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+/* Courbes lumineuses (halo neutre : la couleur de chaque série reste la sienne). */
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) svg :is(polyline,circle){filter:drop-shadow(0 0 3px rgba(255,255,255,.28))}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) .controls button{background:transparent;border-color:var(--line);color:var(--muted);text-transform:uppercase;font-size:.74rem;letter-spacing:.1em}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) .controls button[aria-pressed="true"]{background:rgba(var(--glow),.16);border-color:var(--accent);color:var(--accent);box-shadow:0 0 12px rgba(var(--glow),.45)}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(form button[type=submit]:not(.link),.chat-open,.msg.q){color:var(--solid)}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) .chat-open{box-shadow:0 0 18px rgba(var(--glow),.6)}
+:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) :is(.chat,.tip,.zoom-reset,.burger){background:var(--solid)}
+@media (max-width:960px){:is([data-theme="jarvis"],[data-theme="ironman"],[data-theme="hologramme"]) .navlinks{background:var(--solid)}}
+/* Iron Man : liseré rouge et or sur les panneaux, réacteur ARC en accent secondaire. */
+[data-theme="ironman"] :is(.tile,.chartbox,.panel){background:linear-gradient(90deg,#c0141c,#f2b630) top/100% 2px no-repeat,var(--panel)}
+[data-theme="ironman"] .tile .big small{color:#4fd8ff;text-shadow:0 0 8px rgba(79,216,255,.6)}
+/* Hologramme : lignes de balayage, léger dédoublement des titres. */
+[data-theme="hologramme"] body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:40;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px);animation:holo-scan 8s linear infinite}
+[data-theme="hologramme"] h1{text-shadow:-1px 0 rgba(255,60,220,.55),1px 0 rgba(0,240,255,.55),0 0 16px rgba(var(--glow),.5);animation:holo-flicker 6s infinite}
+[data-theme="hologramme"] .big{text-shadow:-1px 0 rgba(255,60,220,.35),1px 0 rgba(0,240,255,.35),0 0 12px rgba(var(--glow),.45)}
+@keyframes holo-scan{to{background-position:0 60px}}
+@keyframes holo-flicker{0%,93%,100%{opacity:1}94%{opacity:.75}96%{opacity:1}97%{opacity:.85}}
+@media (prefers-reduced-motion:reduce){[data-theme="hologramme"] body::after,[data-theme="hologramme"] h1{animation:none}}

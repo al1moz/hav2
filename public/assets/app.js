@@ -43,11 +43,58 @@
     const g = $(id); if (!g) return;
     g.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; pressed(g, b); fn(b.dataset); });
   }
-  async function summaryDays(metric, from, to) {
-    const r = await api('summary', { metric, period: 'day', from, to });
-    const map = {}; if (r) r.rows.forEach(x => { map[x.period] = x; });
-    return map;
+  const dayParam = d => d === '24h' || d === '7' ? d : +d;
+  // ---- périodes : 24 h (toutes les 5 min), 7 jours (par heure), sinon par jour ----
+  const wdFmt = new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, weekday: 'short' });
+  const hourFmt = new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, hour: '2-digit' });
+  const dayNumFmt = new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, day: 'numeric' });
+  const iso = t => new Date(t).toISOString().slice(0, 19) + 'Z';
+  /** p : '24h', '7' ou un nombre de jours. hourly : 24 h par heure (minimum et maximum). */
+  function period(p, hourly = false) {
+    if (p === '24h' || p === '7') {
+      const step = p === '24h' && !hourly ? 300000 : 3600000, span = p === '24h' ? 86400000 : 7 * 86400000;
+      const end = Math.floor(Date.now() / step) * step, slots = [];
+      for (let t = end - span + step; t <= end; t += step) slots.push(t);
+      const raw = step === 300000;
+      return {
+        step: raw ? 'raw' : 'hour', from: iso(slots[0]), to: iso(end + step), slots,
+        labels: slots.map(t => raw ? timeFmt.format(new Date(t)) : (p === '7' ? wdFmt.format(new Date(t)) + ' ' : '') + hourFmt.format(new Date(t))),
+        tips: slots.map(t => dayTimeFmt.format(new Date(t))),
+        // Repères de l'axe : minuit sur 7 jours (« mar. 7 »), toutes les 3 heures sur 24 h (« 15 h »).
+        major: slots.map(t => {
+          const d = new Date(t), h = +hourFmt.format(d).slice(0, 2);
+          if (raw && timeFmt.format(d).slice(3) !== '00') return null;
+          if (p === '7') return h === 0 ? wdFmt.format(d) + ' ' + dayNumFmt.format(d) : null;
+          return h % 3 === 0 ? h + ' h' : null;
+        }),
+        per: raw ? 'moyenne sur 5 minutes' : 'moyenne par heure',
+      };
+    }
+    const to = today(), days = daysBetween(addDays(to, -(p - 1)), to);
+    return { step: 'day', from: days[0], to, slots: days, labels: days.map(dayLabel), tips: days.map(d => dateFmt.format(new Date(d + 'T12:00:00Z'))), per: 'moyenne du jour' };
   }
+  /**
+   * Valeurs d'une mesure alignées sur les créneaux de la période : get('avg' | 'min' | 'max' | 'kwh').
+   * minN : relevés minimum par jour pour garder l'énergie d'un jour (jour incomplet = trou).
+   */
+  async function fetchValues(metric, P, minN = 0) {
+    const map = {};
+    if (P.step === 'day') {
+      const r = await api('summary', { metric, period: 'day', from: P.from, to: P.to });
+      if (r) r.rows.forEach(x => { map[x.period] = { avg: x.avg, min: x.min, max: x.max, kwh: x.n >= minN ? x.energy_kwh : null }; });
+    } else {
+      const r = await api('series', { metric, step: P.step, from: P.from, to: P.to });
+      const step = P.step === 'raw' ? 300000 : 3600000;
+      if (r) r.points.forEach(x => {
+        const k = Math.floor(Date.parse(x[0]) / step) * step;
+        map[k] = P.step === 'raw' ? { avg: x[1], min: x[1], max: x[1], kwh: null } : { avg: x[1], min: x[2], max: x[3], kwh: x[4] / 1000 };
+      });
+    }
+    return field => P.slots.map(k => map[k] && map[k][field] !== undefined ? map[k][field] : null);
+  }
+  const legend = (id, series) => { $(id).innerHTML = series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join(''); };
+  /** Libellé de l'heure d'une mesure : « à 10:35 », ou la date si elle date d'avant aujourd'hui. */
+  const at = ts => isoDay.format(new Date(ts)) === today() ? 'à ' + timeFmt.format(new Date(ts)) : 'le ' + dayTimeFmt.format(new Date(ts));
   const failed = el => e => { console.error(e); if (el) empty(el, 'Impossible de charger les données.'); };
 
   // =============== Aujourd'hui ===============
@@ -100,56 +147,114 @@
     async function load(p) {
       const t = today();
       let params, cap, label;
-      if (p === '7' || p === '30') { params = { period: 'day', from: addDays(t, -(+p - 1)), to: t }; cap = `kWh par jour, ${p} derniers jours`; label = dayLabel; }
+      if (p === '24h') {
+        const end = Math.floor(Date.now() / 3600000) * 3600000;
+        params = { period: 'hour', from: iso(end - 23 * 3600000), to: iso(end + 3600000) }; cap = 'kWh par heure, 24 dernières heures'; label = x => hourFmt.format(new Date(x));
+      } else if (p === '7' || p === '30') { params = { period: 'day', from: addDays(t, -(+p - 1)), to: t }; cap = `kWh par jour, ${p} derniers jours`; label = dayLabel; }
       else if (p === '12m') { const m = new Date(t + 'T12:00:00Z'); m.setUTCMonth(m.getUTCMonth() - 11); params = { period: 'month', from: m.toISOString().slice(0, 8) + '01', to: t }; cap = 'kWh par mois, 12 derniers mois'; label = monthLabel; }
       else { params = { period: 'year', from: '2000-01-01', to: t }; cap = 'kWh par année'; label = x => x; }
       $('elec-cap').textContent = cap;
       const r = await api('breakdown', params);
       const labels = r.rows.map(x => label(x.period));
+      const tips = p === '24h' ? r.rows.map(x => dayTimeFmt.format(new Date(x.period))) : undefined;
       const series = r.circuits.map((c, k) => ({ name: c.label, color: COLORS[k % 8], values: r.rows.map(x => x.circuits[c.code] ?? 0) }));
       // Période où les Shelly ne répondaient pas : la différence n'est pas un vrai « reste ».
       const full = x => x.coverage !== null && x.coverage >= 0.9;
       series.push({ name: 'Reste', color: 'var(--faint)', values: r.rows.map(x => full(x) ? x.rest ?? 0 : 0) });
       if (r.rows.some(x => !full(x) && x.rest)) series.push({ name: 'Shelly absents', color: 'var(--absent)', values: r.rows.map(x => full(x) ? 0 : x.rest ?? 0) });
-      stacked($('c-elec'), labels, series, { unit: 'kWh', aria: 'Consommation par circuit' });
+      stacked($('c-elec'), labels, series, { unit: 'kWh', tips, aria: 'Consommation par circuit' });
       $('lg-elec').innerHTML = series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('');
-      $('t-elec').innerHTML = `<table><tr><th>Période</th>${series.map(s => `<th>${esc(s.name)}</th>`).join('')}<th>Total Linky</th></tr>${r.rows.map((x, i) => `<tr><td>${esc(labels[i])}</td>${series.map(s => `<td>${fmt(s.values[i])}</td>`).join('')}<td>${fmt(x.total)}</td></tr>`).join('')}</table>`;
-      $('rep-cap').textContent = 'kWh par circuit, ' + cap.replace(/^kWh par (jour|mois|année), ?/, '');
+      $('t-elec').innerHTML = `<table><tr><th>Période</th>${series.map(s => `<th>${esc(s.name)}</th>`).join('')}<th>Total Linky</th></tr>${r.rows.map((x, i) => `<tr><td>${esc((tips || labels)[i])}</td>${series.map(s => `<td>${fmt(s.values[i])}</td>`).join('')}<td>${fmt(x.total)}</td></tr>`).join('')}</table>`;
+      $('rep-cap').textContent = 'kWh par circuit, ' + cap.replace(/^kWh par (heure|jour|mois|année), ?/, '');
       hbars($('c-rep'), series.map(s => ({ name: s.name, value: s.values.reduce((a, b) => a + b, 0), color: s.color })), { unit: 'kWh', aria: 'Répartition par circuit' });
     }
     onControls('elec-ctl', ds => load(ds.p).catch(failed($('c-elec'))));
-    await load('30');
+
+    // Compteur Linky : index, puissance apparente et tension.
+    const dash = api('dashboard');
+    async function loadLinky(p) {
+      const P = period(p), daily = P.step === 'day', o = { tips: P.tips, major: P.major, zoomGroup: 'linky' };
+      const [va, volt, idx] = await Promise.all(['elec_power', 'elec_voltage', 'elec_index'].map(m => fetchValues(m, P)));
+      $('va-unit').textContent = P.step === 'raw' ? 'VA, moyenne sur 5 minutes' : `VA, moyenne et maximum ${daily ? 'du jour' : 'par heure'}`;
+      const vaS = P.step === 'raw' ? [{ name: 'Moyenne', color: 'var(--s1)', values: va('avg') }]
+        : [{ name: 'Moyenne', color: 'var(--s1)', values: va('avg') }, { name: 'Maximum', color: 'var(--s2)', values: va('max') }];
+      line($('c-va'), P.labels, vaS, Object.assign({ unit: 'VA', min: 0, dec: 0, area: true, aria: 'Puissance apparente' }, o));
+      legend('lg-va', vaS);
+      $('volt-unit').textContent = P.step === 'raw' ? 'V, moyenne sur 5 minutes' : `V, moyenne, minimum et maximum ${daily ? 'du jour' : 'par heure'}`;
+      const vS = P.step === 'raw' ? [{ name: 'Tension', color: 'var(--s1)', values: volt('avg') }]
+        : [{ name: 'Maximum', color: 'var(--s2)', values: volt('max') }, { name: 'Moyenne', color: 'var(--s1)', values: volt('avg') }, { name: 'Minimum', color: 'var(--s3)', values: volt('min') }];
+      line($('c-volt'), P.labels, vS, Object.assign({ w: 360, h: 200, unit: 'V', dec: 0, aria: 'Tension du réseau' }, o));
+      legend('lg-volt', vS);
+      $('idx-unit').textContent = 'kWh, ' + (P.step === 'raw' ? 'relevé toutes les 5 minutes' : daily ? 'en fin de journée' : 'en fin d’heure');
+      line($('c-idx'), P.labels, [{ name: 'Index', color: 'var(--s1)', values: idx(P.step === 'raw' ? 'avg' : 'max') }], Object.assign({ w: 360, h: 200, unit: 'kWh', dec: 0, aria: 'Index du compteur Linky' }, o));
+    }
+    onControls('linky-ctl', ds => loadLinky(dayParam(ds.d)).catch(failed($('c-va'))));
+    const L = (await dash).latest, lt = [];
+    if (L.elec_index) lt.push(tile('Index Linky', fmt(L.elec_index.value, 0), 'kWh', 'relevé ' + at(L.elec_index.ts)));
+    if (L.elec_power) lt.push(tile('Puissance apparente', fmt(L.elec_power.value, 0), 'VA', 'mesurée ' + at(L.elec_power.ts)));
+    if (L.elec_voltage) lt.push(tile('Tension', fmt(L.elec_voltage.value, 0), 'V', 'mesurée ' + at(L.elec_voltage.ts)));
+    $('linky-tiles').innerHTML = lt.join('');
+    await Promise.all([load('30'), loadLinky(30)]);
     const p = await prof;
     line($('c-prof'), p.kw.map((_, h) => h + ' h'), [{ name: 'Moyenne', color: 'var(--s1)', values: p.kw }], { w: 360, h: 200, unit: 'kW', min: 0, area: true, dec: 2, aria: 'Profil horaire moyen' });
   }
 
   // =============== Chauffage ===============
   async function heating() {
-    async function load(n) {
-      const to = today(), from = addDays(to, -(n - 1)), days = daysBetween(from, to), labels = days.map(dayLabel);
-      const [pac, ext] = await Promise.all([summaryDays('circuit_geothermie', from, to), summaryDays('temp_outdoor', from, to)]);
-      line($('c-pac'), labels, [{ name: 'PAC', color: 'var(--s1)', values: days.map(d => pac[d] && pac[d].n >= 144 ? pac[d].energy_kwh : null) }], { w: 360, h: 190, unit: 'kWh', min: 0, area: true, aria: 'Consommation quotidienne de la PAC' });
-      line($('c-ext'), labels, [{ name: 'Extérieur', color: 'var(--s2)', values: days.map(d => ext[d] ? ext[d].avg : null) }], { w: 360, h: 190, unit: '°C', aria: 'Température extérieure moyenne' });
+    async function load(p) {
+      const P = period(p), daily = P.step === 'day', o = { tips: P.tips, major: P.major, zoomGroup: 'chauffage' };
+      const [pac, ext, extPac] = await Promise.all([fetchValues('circuit_geothermie', P, 144), fetchValues('temp_outdoor', P), L.pac_exterieur_temp ? fetchValues('pac_exterieur_temp', P) : null]);
+      // Par jour : kWh du jour (jours où le Shelly répondait). Sur 24 h ou 7 jours : puissance moyenne en kW.
+      $('pac-unit').textContent = daily ? 'kWh par jour (circuit Géothermie, jours où le Shelly répondait)' : `kW, ${P.per} (circuit Géothermie)`;
+      $('ext-unit').textContent = '°C, ' + P.per;
+      const pacValues = daily ? pac('kwh') : pac('avg').map(v => v === null ? null : v / 1000);
+      line($('c-pac'), P.labels, [{ name: 'PAC', color: 'var(--s1)', values: pacValues }], Object.assign({ w: 360, h: 190, unit: daily ? 'kWh' : 'kW', min: 0, area: true, dec: daily ? 1 : 2, aria: 'Consommation de la PAC' }, o));
+      // Sonde Netatmo et sonde extérieure de la PAC, quand elle envoie.
+      const extS = [{ name: 'Netatmo', color: 'var(--s2)', values: ext('avg') }];
+      if (extPac) extS.push({ name: 'Sonde de la PAC', color: 'var(--s5)', values: extPac('avg') });
+      line($('c-ext'), P.labels, extS, Object.assign({ w: 360, h: 190, unit: '°C', aria: 'Température extérieure moyenne' }, o));
+      legend('lg-ext', extS.length > 1 ? extS : []);
+      if (zones.length) {
+        const maps = await Promise.all(zones.map(([code]) => fetchValues(code, P)));
+        const series = zones.map(([, name, color, dash], i) => ({ name, color, dash, values: maps[i]('avg') }));
+        $('zones-cap').textContent = `°C, ${P.per}. Température intérieure lue par la PAC (trait plein) et consigne (pointillés).`;
+        line($('c-zones'), P.labels, series, Object.assign({ unit: '°C', aria: 'Zones de chauffage de la PAC' }, o));
+        legend('lg-zones', series);
+      }
+      if (press.length) {
+        const maps = await Promise.all(press.map(([code]) => fetchValues(code, P)));
+        const series = press.map(([, name, color], i) => ({ name, color, values: maps[i]('avg') }));
+        $('press-cap').textContent = 'bar, ' + P.per;
+        line($('c-press'), P.labels, series, Object.assign({ unit: 'bar', dec: 2, aria: 'Pressions d’eau de la PAC' }, o));
+        legend('lg-press', series);
+      }
       if (water.length) {
-        const maps = await Promise.all(water.map(([code]) => summaryDays(code, from, to)));
-        const series = water.map(([, name, color], i) => ({ name, color, values: days.map(d => maps[i][d] ? maps[i][d].avg : null) }));
-        line($('c-water'), labels, series, { unit: '°C', aria: 'Températures d’eau moyennes par jour' });
-        $('lg-water').innerHTML = series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('');
+        const maps = await Promise.all(water.map(([code]) => fetchValues(code, P)));
+        const series = water.map(([, name, color], i) => ({ name, color, values: maps[i]('avg') }));
+        $('pac-cap').textContent = `°C, ${P.per}. Dernière lecture il y a ${ago(newest)}.`;
+        line($('c-water'), P.labels, series, Object.assign({ unit: '°C', aria: 'Températures d’eau de la PAC' }, o));
+        legend('lg-water', series);
       }
     }
     // Températures d'eau de la PAC (Arkteos) : seulement les mesures déjà reçues.
     const WATER = [['pac_primaire_temp_eau_aller', 'Départ', 'var(--s1)'], ['pac_primaire_temp_eau_retour', 'Retour', 'var(--s3)'],
       ['pac_ecs_temp_eau_milieu', 'Ballon milieu', 'var(--s2)'], ['pac_ecs_temp_eau_bas', 'Ballon bas', 'var(--s4)']];
     const L = (await api('dashboard')).latest;
+    const ZONES = [['pac_zone1_temp_interieur', 'Zone 1', 'var(--s1)'], ['pac_zone1_consigne', 'Consigne zone 1', 'var(--s1)', '5 4'],
+      ['pac_zone2_temp_interieur', 'Zone 2', 'var(--s2)'], ['pac_zone2_consigne', 'Consigne zone 2', 'var(--s2)', '5 4']];
+    const PRESS = [['pac_primaire_pression', 'Primaire', 'var(--s1)'], ['pac_externe_pression', 'Extérieure (captage)', 'var(--s3)']];
     const water = WATER.filter(([code]) => L[code]);
+    const zones = ZONES.filter(([code]) => L[code]), press = PRESS.filter(([code]) => L[code]);
+    $('zones-box').hidden = !zones.length; $('press-box').hidden = !press.length;
+    const newest = water.length ? water.map(([code]) => L[code].ts).sort().pop() : null;
     if (water.length) {
-      const newest = water.map(([code]) => L[code].ts).sort().pop();
-      $('pac-cap').textContent = `Moyenne par jour. Dernière lecture il y a ${ago(newest)}.`;
       const tiles = water.map(([code, name]) => tile(name, fmt(L[code].value), '°C'));
-      if (L.pac_primaire_pression) tiles.push(tile('Pression primaire', fmt(L.pac_primaire_pression.value, 1), 'bar'));
+      for (const [code, name] of ZONES) if (L[code] && !code.includes('consigne')) tiles.push(tile('Intérieur ' + name.toLowerCase(), fmt(L[code].value), '°C', L[code.replace('temp_interieur', 'consigne')] ? 'consigne ' + fmt(L[code.replace('temp_interieur', 'consigne')].value) + ' °C' : ''));
+      for (const [code, name] of PRESS) if (L[code]) tiles.push(tile('Pression ' + name.toLowerCase(), fmt(L[code].value, 1), 'bar'));
+      if (L.pac_exterieur_temp) tiles.push(tile('Sonde extérieure PAC', fmt(L.pac_exterieur_temp.value), '°C'));
       $('pac-tiles').innerHTML = tiles.join('');
     }
-    onControls('heat-ctl', ds => load(+ds.d).catch(failed($('c-pac'))));
+    onControls('heat-ctl', ds => load(dayParam(ds.d)).catch(failed($('c-pac'))));
     const [, e] = await Promise.all([load(30), api('ecs')]);
     const last = e.episodes[0], year = today().slice(0, 4);
     $('ecs-cap').textContent = `Elle ne devrait jamais s’allumer. Activation comptée quand le Shelly mesure au moins ${e.threshold_w} W (au repos il indique environ 4 W).`;
@@ -166,19 +271,27 @@
 
   // =============== Températures ===============
   async function temperatures() {
-    async function load(n) {
-      const to = today(), from = addDays(to, -(n - 1)), days = daysBetween(from, to), labels = days.map(dayLabel);
-      const [lv, up, out] = await Promise.all(['temp_living', 'temp_upstairs', 'temp_outdoor'].map(m => summaryDays(m, from, to)));
+    async function load(p) {
+      const P = period(p), H = p === '24h' ? period(p, true) : P; // minimum et maximum : par heure sur 24 h
+      const [lv, up, out, outH] = await Promise.all([
+        fetchValues('temp_living', P), fetchValues('temp_upstairs', P), fetchValues('temp_outdoor', P), H === P ? null : fetchValues('temp_outdoor', H)]);
+      $('temp-unit').textContent = '°C, ' + P.per;
+      $('minmax-unit').textContent = P.step === 'day' ? '°C par jour' : '°C par heure';
       const series = [['Salon', lv, 'var(--s1)'], ['Étage', up, 'var(--s3)'], ['Extérieur', out, 'var(--s2)']]
-        .map(([name, m, color]) => ({ name, color, values: days.map(d => m[d] ? m[d].avg : null) }))
+        .map(([name, m, color]) => ({ name, color, values: m('avg') }))
         .filter(s => s.values.some(v => v !== null));
-      line($('c-temp'), labels, series, { unit: '°C', aria: 'Températures moyennes par jour' });
+      line($('c-temp'), P.labels, series, { unit: '°C', tips: P.tips, major: P.major, aria: 'Températures moyennes' });
       $('lg-temp').innerHTML = series.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
-      const mm = [{ name: 'Maximum', color: 'var(--s2)', values: days.map(d => out[d] ? out[d].max : null) }, { name: 'Minimum', color: 'var(--s1)', values: days.map(d => out[d] ? out[d].min : null) }];
-      line($('c-minmax'), labels, mm, { unit: '°C', aria: 'Minimum et maximum extérieurs' });
+      const o = outH || out;
+      const mm = [{ name: 'Maximum', color: 'var(--s2)', values: o('max') }, { name: 'Minimum', color: 'var(--s1)', values: o('min') }];
+      line($('c-minmax'), H.labels, mm, { unit: '°C', tips: H.tips, major: H.major, aria: 'Minimum et maximum extérieurs' });
+      const hpa = await fetchValues('pressure_outdoor', P);
+      $('hpa-unit').textContent = 'hPa, ' + P.per;
+      line($('c-hpa'), P.labels, [{ name: 'Pression', color: 'var(--s4)', values: hpa('avg') }], { unit: 'hPa', dec: 0, tips: P.tips, major: P.major,
+        aria: 'Pression atmosphérique', emptyText: 'Pas encore de pression reçue : l’entité Netatmo est à relayer dans l’add-on (pressure_outdoor, en hPa).' });
       $('lg-minmax').innerHTML = mm.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
     }
-    onControls('temp-ctl', ds => load(+ds.d).catch(failed($('c-temp'))));
+    onControls('temp-ctl', ds => load(dayParam(ds.d)).catch(failed($('c-temp'))));
     await load(30);
   }
 
@@ -198,22 +311,28 @@
     if (ho) tiles.push(tile('Extérieur', fmt(ho.value, 0), '%', to ? `point de rosée ${fmt(dewPoint(to.value, ho.value))} °C` : ''));
     if (L.co2_living) tiles.push(tile('CO₂ salon', fmt(L.co2_living.value, 0), 'ppm', ''));
     $('hum-tiles').innerHTML = tiles.join('');
-    async function load(n) {
-      const to = today(), from = addDays(to, -(n - 1)), days = daysBetween(from, to), labels = days.map(dayLabel);
+    async function load(p) {
+      const P = period(p), none = () => P.slots.map(() => null);
       // Seules les mesures déjà reçues sont demandées.
-      const [hl, hu, hout, tl, tu, tout] = await Promise.all(['humidity_living', 'humidity_upstairs', 'humidity_outdoor', 'temp_living', 'temp_upstairs', 'temp_outdoor'].map(m => L[m] ? summaryDays(m, from, to) : {}));
-      const v = (m, d) => m[d] ? m[d].avg : null;
+      const [hl, hu, hout, tl, tu, tout] = (await Promise.all(['humidity_living', 'humidity_upstairs', 'humidity_outdoor', 'temp_living', 'temp_upstairs', 'temp_outdoor']
+        .map(m => L[m] ? fetchValues(m, P) : null))).map(f => f ? f('avg') : none());
+      $('hum-unit').textContent = `%, ${P.per}. Bande verte : zone de confort 40 à 60 %`;
+      const o = { tips: P.tips, major: P.major, zoomGroup: 'humidite' };
       const rel = [['Salon', hl, 'var(--s1)'], ['Étage', hu, 'var(--s3)'], ['Extérieur', hout, 'var(--s2)']]
-        .map(([name, m, color]) => ({ name, color, values: days.map(d => v(m, d)) })).filter(s => s.values.some(x => x !== null));
-      line($('c-hum'), labels, rel, { unit: '%', band: [40, 60], bandLabel: 'confort', dec: 0, aria: 'Humidité relative' });
+        .map(([name, values, color]) => ({ name, color, values })).filter(s => s.values.some(x => x !== null));
+      line($('c-hum'), P.labels, rel, Object.assign({ unit: '%', band: [40, 60], bandLabel: 'confort', dec: 0, aria: 'Humidité relative' }, o));
       $('lg-hum').innerHTML = rel.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
       const abs = [['Salon', hl, tl, 'var(--s1)'], ['Étage', hu, tu, 'var(--s3)'], ['Extérieur', hout, tout, 'var(--s2)']]
-        .map(([name, h, t, color]) => ({ name, color, values: days.map(d => v(h, d) !== null && v(t, d) !== null ? absHum(v(t, d), v(h, d)) : null) }))
+        .map(([name, h, t, color]) => ({ name, color, values: h.map((x, i) => x !== null && t[i] !== null ? absHum(t[i], x) : null) }))
         .filter(s => s.values.some(x => x !== null));
-      line($('c-abs'), labels, abs, { unit: 'g/m³', aria: 'Humidité absolue', emptyText: 'Il faut la température et l’humidité au même endroit.' });
+      line($('c-abs'), P.labels, abs, Object.assign({ unit: 'g/m³', aria: 'Humidité absolue', emptyText: 'Il faut la température et l’humidité au même endroit.' }, o));
+      const co2 = L.co2_living ? await fetchValues('co2_living', P) : null;
+      $('co2-unit').textContent = `ppm, ${P.per}. Bande verte : air sain, sous 1 000 ppm ; au-delà, aérer.`;
+      line($('c-co2'), P.labels, co2 ? [{ name: 'CO₂ salon', color: 'var(--s5)', values: co2('avg') }] : [],
+        Object.assign({ unit: 'ppm', min: 400, dec: 0, band: [400, 1000], bandLabel: 'air sain', aria: 'CO₂ du salon' }, o));
       $('lg-abs').innerHTML = abs.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join('');
     }
-    onControls('hum-ctl', ds => load(+ds.d).catch(failed($('c-hum'))));
+    onControls('hum-ctl', ds => load(dayParam(ds.d)).catch(failed($('c-hum'))));
     await load(30);
   }
 
@@ -266,7 +385,9 @@
       const n = pts.length, mX = pts.reduce((a, p) => a + p.x, 0) / n, mY = pts.reduce((a, p) => a + p.y, 0) / n;
       const r = pts.reduce((a, p) => a + (p.x - mX) * (p.y - mY), 0) / Math.sqrt(pts.reduce((a, p) => a + (p.x - mX) ** 2, 0) * pts.reduce((a, p) => a + (p.y - mY) ** 2, 0));
       const xmin = Math.min(...pts.map(p => p.x)), xmax = Math.max(...pts.map(p => p.x));
-      const fit = [[xmin, best.base + best.slope * Math.max(0, best.th - xmin)], [best.th, best.base], [xmax, best.base]];
+      // Tendance tracée seulement sur l'étendue des points : le coude n'apparaît que s'il tombe dedans.
+      const model = t => best.base + best.slope * Math.max(0, best.th - t);
+      const fit = [xmin, Math.min(Math.max(best.th, xmin), xmax), xmax].map(t => [t, model(t)]);
       scatter($('c-sc'), pts, { fit, xLabel: 'température extérieure', aria: 'Consommation du jour selon la température extérieure' });
       $('lg-sc').innerHTML = ys.map(y => `<span><i style="background:${color[y]};border-radius:50%"></i>${y}</span>`).join('') + '<span><i style="background:none;border-top:2px dashed var(--fg);height:0;border-radius:0"></i>Tendance</span>';
       $('corr').innerHTML = tile('Par degré en moins', '+' + fmt(best.slope, 2), 'kWh/jour', `sous ${fmt(best.th)} °C de moyenne journalière, chaque degré perdu ajoute autant`)
@@ -285,6 +406,15 @@
     c.seasons = c.seasons.filter(x => x.days >= 30);
     $('t-dju').innerHTML = c.seasons.length ? `<table><tr><th>Hiver</th><th>Jours complets</th><th>DJU</th><th>kWh</th><th>kWh par DJU</th></tr>${c.seasons.map(s =>
       `<tr><td>${esc(s.season)}</td><td>${s.days}</td><td>${fmt(s.dju, 0)}</td><td>${fmt(s.kwh, 0)}</td><td>${fmt(s.kwh_per_dju, 2)}</td></tr>`).join('')}</table>` : '';
+  }
+
+  // Menu « burger » (petits écrans) : ouvert par le bouton, fermé par Échap ou un clic ailleurs.
+  const nav = document.querySelector('nav'), burger = nav && nav.querySelector('.burger');
+  if (burger) {
+    const setOpen = open => { nav.classList.toggle('open', open); burger.setAttribute('aria-expanded', open); };
+    burger.addEventListener('click', () => setOpen(!nav.classList.contains('open')));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && nav.classList.contains('open')) { setOpen(false); burger.focus(); } });
+    document.addEventListener('click', e => { if (!nav.contains(e.target)) setOpen(false); });
   }
 
   const pages = { accueil: home, electricite: electricity, chauffage: heating, temperatures, humidite: humidity, comparer: compare };

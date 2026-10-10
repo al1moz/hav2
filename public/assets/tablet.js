@@ -65,6 +65,7 @@
       panel.parentNode.replaceChild(fresh, panel);
       panel = fresh;
       root.setAttribute('data-theme', fresh.getAttribute('data-theme'));
+      document.getElementById('veil').style.opacity = fresh.getAttribute('data-veil') || '0';
       if ((fresh.getAttribute('data-bg') || '') !== background) { setBackground(fresh.getAttribute('data-bg') || ''); }
       lastOk = new Date();
       offlineEl.setAttribute('hidden', '');

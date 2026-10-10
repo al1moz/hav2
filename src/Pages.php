@@ -74,7 +74,7 @@ HTML
 <div class="chartbox">
   <h3>Consommation</h3><p class="cap" id="elec-cap">kWh</p>
   <div class="controls" role="group" aria-label="Période" id="elec-ctl">
-    <button type="button" data-p="7">7 jours</button><button type="button" data-p="30" aria-pressed="true">30 jours</button>
+    <button type="button" data-p="24h">24 h</button><button type="button" data-p="7">7 jours</button><button type="button" data-p="30" aria-pressed="true">30 jours</button>
     <button type="button" data-p="12m">12 mois</button><button type="button" data-p="y">Années</button>
   </div>
   <div id="c-elec"></div><div class="legend" id="lg-elec"></div>
@@ -83,6 +83,16 @@ HTML
 <div class="two">
   <div class="chartbox"><h3>Répartition</h3><p class="cap" id="rep-cap">kWh par circuit</p><div id="c-rep"></div></div>
   <div class="chartbox"><h3>Profil horaire moyen</h3><p class="cap">kW, moyenne par heure de la journée, 30 derniers jours</p><div id="c-prof"></div></div>
+</div>
+<h2 class="section">Compteur Linky</h2>
+<div class="tiles" id="linky-tiles"></div>
+<div class="controls" role="group" aria-label="Période du compteur" id="linky-ctl">
+  <button type="button" data-d="24h">24 h</button><button type="button" data-d="7">7 jours</button><button type="button" data-d="30" aria-pressed="true">30 jours</button><button type="button" data-d="90">90 jours</button><button type="button" data-d="365">12 mois</button>
+</div>
+<div class="chartbox"><h3>Puissance apparente</h3><p class="cap" id="va-unit">VA</p><div id="c-va"></div><div class="legend" id="lg-va"></div></div>
+<div class="two">
+  <div class="chartbox"><h3>Tension du réseau</h3><p class="cap" id="volt-unit">V</p><div id="c-volt"></div><div class="legend" id="lg-volt"></div></div>
+  <div class="chartbox"><h3>Index du compteur</h3><p class="cap" id="idx-unit">kWh</p><div id="c-idx"></div></div>
 </div>
 HTML
         );
@@ -95,13 +105,13 @@ HTML
         }
         View::page('/chauffage', 'Chauffage', <<<'HTML'
 <h1>Chauffage</h1>
-<p class="sub">La géothermie consomme plus quand il fait froid. Les deux graphiques partagent le même axe des jours.</p>
+<p class="sub">La géothermie consomme plus quand il fait froid. Les graphiques partagent le même axe et zooment ensemble : glisser sur l'un d'eux, double-clic pour revenir.</p>
 <div class="controls" role="group" aria-label="Période" id="heat-ctl">
-  <button type="button" data-d="30" aria-pressed="true">30 jours</button><button type="button" data-d="90">90 jours</button><button type="button" data-d="365">12 mois</button>
+  <button type="button" data-d="24h">24 h</button><button type="button" data-d="7">7 jours</button><button type="button" data-d="30" aria-pressed="true">30 jours</button><button type="button" data-d="90">90 jours</button><button type="button" data-d="365">12 mois</button>
 </div>
 <div class="two">
-  <div class="chartbox"><h3>Consommation de la PAC</h3><p class="cap">kWh par jour (circuit Géothermie, jours où le Shelly répondait)</p><div id="c-pac"></div></div>
-  <div class="chartbox"><h3>Température extérieure</h3><p class="cap">°C, moyenne du jour</p><div id="c-ext"></div></div>
+  <div class="chartbox"><h3>Consommation de la PAC</h3><p class="cap" id="pac-unit">kWh par jour (circuit Géothermie, jours où le Shelly répondait)</p><div id="c-pac"></div></div>
+  <div class="chartbox"><h3>Température extérieure</h3><p class="cap" id="ext-unit">°C, moyenne du jour</p><div id="c-ext"></div><div class="legend" id="lg-ext"></div></div>
 </div>
 <div class="chartbox" id="pac-box">
   <h3>Températures d'eau de la PAC</h3>
@@ -109,6 +119,16 @@ HTML
   <div class="tiles" id="pac-tiles"></div>
   <div id="c-water"></div>
   <div class="legend" id="lg-water"></div>
+</div>
+<div class="chartbox" id="zones-box" hidden>
+  <h3>Zones de chauffage</h3>
+  <p class="cap" id="zones-cap">°C, température intérieure lue par la PAC (trait plein) et consigne (pointillés)</p>
+  <div id="c-zones"></div><div class="legend" id="lg-zones"></div>
+</div>
+<div class="chartbox" id="press-box" hidden>
+  <h3>Pressions d'eau de la PAC</h3>
+  <p class="cap" id="press-cap">bar</p>
+  <div id="c-press"></div><div class="legend" id="lg-press"></div>
 </div>
 <div class="chartbox" id="appoint">
   <h3>Résistance d'appoint du ballon ECS</h3>
@@ -127,12 +147,13 @@ HTML
         }
         View::page('/temperatures', 'Températures', <<<'HTML'
 <h1>Températures</h1>
-<p class="sub">Intérieur et extérieur, moyenne par jour.</p>
+<p class="sub">Intérieur et extérieur. Glisser sur un graphique pour zoomer, double-clic pour revenir.</p>
 <div class="controls" role="group" aria-label="Période" id="temp-ctl">
-  <button type="button" data-d="30" aria-pressed="true">30 jours</button><button type="button" data-d="90">90 jours</button><button type="button" data-d="365">12 mois</button>
+  <button type="button" data-d="24h">24 h</button><button type="button" data-d="7">7 jours</button><button type="button" data-d="30" aria-pressed="true">30 jours</button><button type="button" data-d="90">90 jours</button><button type="button" data-d="365">12 mois</button>
 </div>
-<div class="chartbox"><h3>Salon, étage et extérieur</h3><p class="cap">°C, moyenne du jour</p><div id="c-temp"></div><div class="legend" id="lg-temp"></div></div>
-<div class="chartbox"><h3>Minimum et maximum dehors</h3><p class="cap">°C par jour</p><div id="c-minmax"></div><div class="legend" id="lg-minmax"></div></div>
+<div class="chartbox"><h3>Salon, étage et extérieur</h3><p class="cap" id="temp-unit">°C, moyenne du jour</p><div id="c-temp"></div><div class="legend" id="lg-temp"></div></div>
+<div class="chartbox"><h3>Minimum et maximum dehors</h3><p class="cap" id="minmax-unit">°C par jour</p><div id="c-minmax"></div><div class="legend" id="lg-minmax"></div></div>
+<div class="chartbox"><h3>Pression atmosphérique</h3><p class="cap" id="hpa-unit">hPa</p><div id="c-hpa"></div></div>
 HTML
         );
     }
@@ -147,10 +168,11 @@ HTML
 <p class="sub">Modules Netatmo, lus par l'add-on dans Home Assistant. Seules les sondes qui envoient une mesure sont affichées.</p>
 <div class="tiles" id="hum-tiles"></div>
 <div class="controls" role="group" aria-label="Période" id="hum-ctl">
-  <button type="button" data-d="30" aria-pressed="true">30 jours</button><button type="button" data-d="90">90 jours</button><button type="button" data-d="365">12 mois</button>
+  <button type="button" data-d="24h">24 h</button><button type="button" data-d="7">7 jours</button><button type="button" data-d="30" aria-pressed="true">30 jours</button><button type="button" data-d="90">90 jours</button><button type="button" data-d="365">12 mois</button>
 </div>
-<div class="chartbox"><h3>Humidité relative</h3><p class="cap">%, moyenne du jour. Bande verte : zone de confort 40 à 60 %</p><div id="c-hum"></div><div class="legend" id="lg-hum"></div></div>
+<div class="chartbox"><h3>Humidité relative</h3><p class="cap" id="hum-unit">%, moyenne du jour. Bande verte : zone de confort 40 à 60 %</p><div id="c-hum"></div><div class="legend" id="lg-hum"></div></div>
 <div class="chartbox"><h3>Eau contenue dans l'air</h3><p class="cap">g/m³ (humidité absolue), calculée à partir de la température et de l'humidité. Quand la courbe extérieure passe sous l'intérieure, ventiler assèche la maison.</p><div id="c-abs"></div><div class="legend" id="lg-abs"></div></div>
+<div class="chartbox"><h3>CO₂ du salon</h3><p class="cap" id="co2-unit">ppm. Bande verte : air sain, sous 1 000 ppm ; au-delà, aérer</p><div id="c-co2"></div></div>
 HTML
         );
     }
