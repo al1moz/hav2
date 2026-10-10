@@ -50,7 +50,8 @@ final class ChatTools
                 . 'kWh et coût en euros au prix du kWh de l\'époque.',
                 $range(['metric' => $metric, 'period' => ['type' => 'string', 'enum' => ['day', 'month', 'year']]])],
             ['get_breakdown', 'kWh du compteur Linky (total de la maison) et de chaque circuit mesuré par jour, mois ou année. '
-                . 'rest = total moins circuits. coverage = part du temps où les Shelly répondaient : sous 0,9, rest n\'est pas fiable.',
+                . 'rest = total moins circuits. coverage = part du temps où les Shelly répondaient : sous 0,9, rest n\'est pas fiable. '
+                . 'cost, circuits_cost, rest_cost : coût en euros au prix du kWh de chaque jour ; subscription : part de l\'abonnement (0 s\'il n\'est pas saisi).',
                 $range(['period' => ['type' => 'string', 'enum' => ['day', 'month', 'year']]])],
             ['get_daily_profile', 'Puissance moyenne de la maison (kW) pour chaque heure de la journée (0 à 23 h, heure locale) sur la période.', $range()],
             ['get_ecs_activations', 'Toutes les activations de la résistance d\'appoint du ballon d\'eau chaude : début, durée, kWh, par année.', $none],

@@ -88,11 +88,19 @@ final class Admin
             case 'price_add':
                 $from = (string) ($post['valid_from'] ?? '');
                 $price = str_replace(',', '.', (string) ($post['kwh_price'] ?? ''));
+                $subscription = str_replace(',', '.', trim((string) ($post['subscription_month'] ?? '')));
                 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !is_numeric($price) || (float) $price <= 0 || (float) $price > 5) {
                     return 'Prix : date AAAA-MM-JJ et prix du kWh en euros (ex. 0,2516).';
                 }
-                Db::run('INSERT INTO price (valid_from, kwh_price) VALUES (?, ?) ON DUPLICATE KEY UPDATE kwh_price = VALUES(kwh_price)', [$from, $price]);
-                return 'Prix enregistré.';
+                if ($subscription !== '' && (!is_numeric($subscription) || (float) $subscription < 0 || (float) $subscription > 500)) {
+                    return 'Abonnement : montant mensuel en euros (ex. 15,47), ou vide pour ne pas le compter.';
+                }
+                Db::run(
+                    'INSERT INTO price (valid_from, kwh_price, subscription_month) VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE kwh_price = VALUES(kwh_price), subscription_month = VALUES(subscription_month)',
+                    [$from, $price, $subscription === '' ? null : $subscription]
+                );
+                return 'Tarif enregistré.';
 
             case 'price_delete':
                 Db::run('DELETE FROM price WHERE valid_from = ?', [(string) ($post['valid_from'] ?? '')]);
@@ -202,14 +210,17 @@ final class Admin
 
         // Prix
         $rows = '';
-        foreach (Db::all('SELECT valid_from, kwh_price FROM price ORDER BY valid_from DESC') as $p) {
-            $rows .= '<tr><td>' . $h($p['valid_from']) . '</td><td>' . $h(rtrim(rtrim(number_format((float) $p['kwh_price'], 5, ',', ''), '0'), ',')) . ' €</td><td>'
+        foreach (Db::all('SELECT valid_from, kwh_price, subscription_month FROM price ORDER BY valid_from DESC') as $p) {
+            $rows .= '<tr><td>' . $h($p['valid_from']) . '</td><td>' . $h(rtrim(rtrim(number_format((float) $p['kwh_price'], 5, ',', ''), '0'), ',')) . ' €</td>'
+                . '<td>' . ($p['subscription_month'] === null ? 'non compté' : $h(number_format((float) $p['subscription_month'], 2, ',', ' ')) . ' € par mois') . '</td><td>'
                 . $form('price_delete', '<input type="hidden" name="valid_from" value="' . $h($p['valid_from']) . '"><button type="submit" class="link">Supprimer</button>', 'inline')
                 . '</td></tr>';
         }
-        $out .= '<section class="panel"><h2>Prix du kWh (tarif Base)</h2><p class="note">Chaque jour est chiffré au prix en vigueur à cette date.</p>'
-            . '<div class="tbl"><table><tr><th>À partir du</th><th>Prix TTC</th><th></th></tr>' . $rows . '</table></div>'
-            . $form('price_add', '<div class="fields">' . self::field('valid_from', 'À partir du', '', 'date') . self::field('kwh_price', 'Prix du kWh (€)', '', 'text') . '</div><button type="submit">Ajouter</button>')
+        $out .= '<section class="panel"><h2>Tarif (Base)</h2><p class="note">Chaque jour est chiffré au tarif en vigueur à cette date, '
+            . 'abonnement compris s\'il est saisi (montant mensuel TTC de la facture, réparti par jour). Une date déjà présente est remplacée.</p>'
+            . '<div class="tbl"><table><tr><th>À partir du</th><th>Prix du kWh TTC</th><th>Abonnement TTC</th><th></th></tr>' . $rows . '</table></div>'
+            . $form('price_add', '<div class="fields">' . self::field('valid_from', 'À partir du', '', 'date') . self::field('kwh_price', 'Prix du kWh (€)', '', 'text')
+                . self::field('subscription_month', 'Abonnement par mois (€)', '', 'text', 'Facultatif : vide, il n\'est pas compté.') . '</div><button type="submit">Ajouter</button>')
             . '</section>';
 
         // Mesures

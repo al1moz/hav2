@@ -84,6 +84,17 @@ HTML
   <div class="chartbox"><h3>Répartition</h3><p class="cap" id="rep-cap">kWh par circuit</p><div id="c-rep"></div></div>
   <div class="chartbox"><h3>Profil horaire moyen</h3><p class="cap">kW, moyenne par heure de la journée, 30 derniers jours</p><div id="c-prof"></div></div>
 </div>
+<h2 class="section" id="cout">Coût</h2>
+<div class="controls" role="group" aria-label="Période du coût" id="cost-ctl">
+  <button type="button" data-p="24h">24 h</button><button type="button" data-p="7">7 jours</button><button type="button" data-p="30" aria-pressed="true">30 jours</button>
+  <button type="button" data-p="12m">12 mois</button><button type="button" data-p="y">Années</button>
+</div>
+<div class="tiles" id="cost-tiles"></div>
+<div class="two">
+  <div class="chartbox"><h3>Coût</h3><p class="cap" id="cost-cap">€</p><div id="c-cost"></div><div class="legend" id="lg-cost"></div>
+    <details><summary>Voir le tableau</summary><div class="tbl" id="t-cost"></div></details></div>
+  <div class="chartbox"><h3>Coût par circuit</h3><p class="cap" id="costrep-cap">€ par circuit</p><div id="c-costrep"></div></div>
+</div>
 <h2 class="section">Compteur Linky</h2>
 <div class="tiles" id="linky-tiles"></div>
 <div class="controls" role="group" aria-label="Période du compteur" id="linky-ctl">

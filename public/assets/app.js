@@ -145,31 +145,97 @@
   // =============== Électricité ===============
   async function electricity() {
     const prof = api('profile', { from: addDays(today(), -29), to: today() });
-    async function load(p) {
+    /** Bouton de période : paramètres de /breakdown, unité des barres, durée et libellés. */
+    function slices(p) {
       const t = today();
-      let params, cap, label;
       if (p === '24h') {
         const end = Math.floor(Date.now() / 3600000) * 3600000;
-        params = { period: 'hour', from: iso(end - 23 * 3600000), to: iso(end + 3600000) }; cap = 'kWh par heure, 24 dernières heures'; label = x => hourFmt.format(new Date(x));
-      } else if (p === '7' || p === '30') { params = { period: 'day', from: addDays(t, -(+p - 1)), to: t }; cap = `kWh par jour, ${p} derniers jours`; label = dayLabel; }
-      else if (p === '12m') { const m = new Date(t + 'T12:00:00Z'); m.setUTCMonth(m.getUTCMonth() - 11); params = { period: 'month', from: m.toISOString().slice(0, 8) + '01', to: t }; cap = 'kWh par mois, 12 derniers mois'; label = monthLabel; }
-      else { params = { period: 'year', from: '2000-01-01', to: t }; cap = 'kWh par année'; label = x => x; }
-      $('elec-cap').textContent = cap;
-      const r = await api('breakdown', params);
-      const labels = r.rows.map(x => label(x.period));
-      const tips = p === '24h' ? r.rows.map(x => dayTimeFmt.format(new Date(x.period))) : undefined;
-      const series = r.circuits.map((c, k) => ({ name: c.label, color: COLORS[k % 8], values: r.rows.map(x => x.circuits[c.code] ?? 0) }));
+        return { params: { period: 'hour', from: iso(end - 23 * 3600000), to: iso(end + 3600000) }, per: 'heure', span: '24 dernières heures',
+          label: x => hourFmt.format(new Date(x)), tip: x => dayTimeFmt.format(new Date(x)) };
+      }
+      if (p === '7' || p === '30') return { params: { period: 'day', from: addDays(t, -(+p - 1)), to: t }, per: 'jour', span: `${p} derniers jours`, label: dayLabel };
+      if (p === '12m') {
+        const m = new Date(t.slice(0, 8) + '01T12:00:00Z'); m.setUTCMonth(m.getUTCMonth() - 11);
+        return { params: { period: 'month', from: m.toISOString().slice(0, 10), to: t }, per: 'mois', span: '12 derniers mois', label: monthLabel };
+      }
+      return { params: { period: 'year', from: '2000-01-01', to: t }, per: 'année', span: 'depuis le début', label: x => x };
+    }
+    // La consommation et le coût demandent souvent la même période : une seule requête pour les deux.
+    const asked = {};
+    function breakdown(params) {
+      const k = JSON.stringify(params), m = asked[k];
+      if (m && Date.now() - m.t < 60000) return m.r;
+      const r = api('breakdown', params);
+      asked[k] = { t: Date.now(), r };
+      r.catch(() => { delete asked[k]; });
+      return r;
+    }
+    /** Une série par circuit, puis le reste et la part sans Shelly : en kWh, ou en euros si euros est vrai. */
+    function parts(r, euros) {
+      const c = euros ? 'circuits_cost' : 'circuits', rest = euros ? 'rest_cost' : 'rest';
+      const series = r.circuits.map((m, k) => ({ name: m.label, color: COLORS[k % 8], values: r.rows.map(x => x[c][m.code] ?? 0) }));
       // Période où les Shelly ne répondaient pas : la différence n'est pas un vrai « reste ».
       const full = x => x.coverage !== null && x.coverage >= 0.9;
-      series.push({ name: 'Reste', color: 'var(--faint)', values: r.rows.map(x => full(x) ? x.rest ?? 0 : 0) });
-      if (r.rows.some(x => !full(x) && x.rest)) series.push({ name: 'Shelly absents', color: 'var(--absent)', values: r.rows.map(x => full(x) ? 0 : x.rest ?? 0) });
+      series.push({ name: 'Reste', color: 'var(--faint)', values: r.rows.map(x => full(x) ? x[rest] ?? 0 : 0) });
+      if (r.rows.some(x => !full(x) && x[rest])) series.push({ name: 'Shelly absents', color: 'var(--absent)', values: r.rows.map(x => full(x) ? 0 : x[rest] ?? 0) });
+      return series;
+    }
+    const total = s => ({ name: s.name, color: s.color, value: s.values.reduce((a, b) => a + b, 0) });
+    async function load(p) {
+      const S = slices(p);
+      $('elec-cap').textContent = `kWh par ${S.per}, ${S.span}`;
+      const r = await breakdown(S.params);
+      const labels = r.rows.map(x => S.label(x.period));
+      const tips = S.tip && r.rows.map(x => S.tip(x.period));
+      const series = parts(r, false);
       stacked($('c-elec'), labels, series, { unit: 'kWh', tips, aria: 'Consommation par circuit' });
-      $('lg-elec').innerHTML = series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('');
+      legend('lg-elec', series);
       $('t-elec').innerHTML = `<table><tr><th>Période</th>${series.map(s => `<th>${esc(s.name)}</th>`).join('')}<th>Total Linky</th></tr>${r.rows.map((x, i) => `<tr><td>${esc((tips || labels)[i])}</td>${series.map(s => `<td>${fmt(s.values[i])}</td>`).join('')}<td>${fmt(x.total)}</td></tr>`).join('')}</table>`;
-      $('rep-cap').textContent = 'kWh par circuit, ' + cap.replace(/^kWh par (heure|jour|mois|année), ?/, '');
-      hbars($('c-rep'), series.map(s => ({ name: s.name, value: s.values.reduce((a, b) => a + b, 0), color: s.color })), { unit: 'kWh', aria: 'Répartition par circuit' });
+      $('rep-cap').textContent = 'kWh par circuit, ' + S.span;
+      hbars($('c-rep'), series.map(total), { unit: 'kWh', aria: 'Répartition par circuit' });
     }
     onControls('elec-ctl', ds => load(ds.p).catch(failed($('c-elec'))));
+
+    // Coût : énergie au prix du kWh de chaque jour, plus l'abonnement s'il est saisi dans l'administration.
+    // [tuile, période de comparaison, moyenne, heures par unité de la moyenne]
+    const COST = {
+      '24h': ['24 dernières heures', '24 h d’avant', 'Par heure en moyenne', 1],
+      7: ['7 derniers jours', '7 jours d’avant', 'Par jour en moyenne', 24],
+      30: ['30 derniers jours', '30 jours d’avant', 'Par jour en moyenne', 24],
+      '12m': ['12 derniers mois', 'un an plus tôt', 'Par mois en moyenne', 730.5],
+      y: ['Cette année', `${today().slice(0, 4) - 1} à la même date`, 'Par mois en moyenne', 730.5],
+    };
+    const eur = (v, d = 2) => v === null || v === undefined ? '–' : fmt(v, d) + '\u00a0€';
+    async function loadCost(p) {
+      const S = slices(p), [now, before, avg, hours] = COST[p], d = p === '12m' || p === 'y' ? 0 : 2;
+      const [c, r] = await Promise.all([api('cost', { period: p }), breakdown(S.params)]);
+      const cur = c.current, prev = c.previous;
+      const pct = cur.eur !== null && prev.eur ? ` (${cur.eur >= prev.eur ? '+' : ''}${fmt((cur.eur - prev.eur) / prev.eur * 100, 0)}\u00a0%)` : '';
+      const price = cur.kwh_price === null ? '' : Math.abs(cur.kwh_price - c.kwh_price) < 0.00001
+        ? `kWh à ${eur(c.kwh_price, 4)}` : `kWh à ${eur(cur.kwh_price, 4)} en moyenne`;
+      const tiles = [
+        tile(now, fmt(cur.eur, d), '€', `${before} : ${prev.eur === null ? 'pas de données' : eur(prev.eur, d) + pct}`),
+        tile('Consommation', fmt(cur.kwh, d ? 1 : 0), 'kWh', prev.kwh === null ? '' : `${before} : ${fmt(prev.kwh, d ? 1 : 0)} kWh`),
+        tile(avg, fmt(cur.hours ? cur.eur / cur.hours * hours : null, 2), '€', price),
+      ];
+      if (cur.subscription_eur > 0) tiles.push(tile('Dont abonnement', fmt(cur.subscription_eur, d), '€', `${eur(c.subscription_month)} par mois`));
+      $('cost-tiles').innerHTML = tiles.join('');
+
+      const labels = r.rows.map(x => S.label(x.period));
+      const tips = S.tip && r.rows.map(x => S.tip(x.period));
+      // Couleurs neutres : celles de la palette désignent les circuits, à côté.
+      const series = [{ name: 'Électricité', color: 'var(--fg)', values: r.rows.map(x => x.cost ?? 0) }];
+      const sub = r.rows.some(x => x.subscription > 0);
+      if (sub) series.push({ name: 'Abonnement', color: 'var(--muted)', values: r.rows.map(x => x.subscription) });
+      $('cost-cap').textContent = `€ par ${S.per}, ${S.span}` + (c.subscription_month > 0 ? ', abonnement compris' : '. Abonnement non compté : à saisir dans l’administration');
+      stacked($('c-cost'), labels, series, { unit: '€', dec: 2, tips, w: 360, h: 200, aria: 'Coût par période' });
+      legend('lg-cost', sub ? series : []);
+      $('t-cost').innerHTML = `<table><tr><th>Période</th><th>kWh</th><th>Électricité</th>${sub ? '<th>Abonnement</th><th>Total</th>' : ''}</tr>${r.rows.map((x, i) =>
+        `<tr><td>${esc((tips || labels)[i])}</td><td>${fmt(x.total)}</td><td>${eur(x.cost)}</td>${sub ? `<td>${eur(x.subscription)}</td><td>${eur((x.cost ?? 0) + x.subscription)}</td>` : ''}</tr>`).join('')}</table>`;
+      $('costrep-cap').textContent = '€ par circuit, ' + S.span;
+      hbars($('c-costrep'), parts(r, true).map(total), { unit: '€', dec: d, aria: 'Coût par circuit' });
+    }
+    onControls('cost-ctl', ds => loadCost(ds.p).catch(failed($('c-cost'))));
 
     // Compteur Linky : index, puissance apparente et tension.
     const dash = api('dashboard');
@@ -195,7 +261,7 @@
     if (L.elec_power) lt.push(tile('Puissance apparente', fmt(L.elec_power.value, 0), 'VA', 'mesurée ' + at(L.elec_power.ts)));
     if (L.elec_voltage) lt.push(tile('Tension', fmt(L.elec_voltage.value, 0), 'V', 'mesurée ' + at(L.elec_voltage.ts)));
     $('linky-tiles').innerHTML = lt.join('');
-    await Promise.all([load('30'), loadLinky(30)]);
+    await Promise.all([load('30'), loadCost('30').catch(failed($('c-cost'))), loadLinky(30)]);
     const p = await prof;
     line($('c-prof'), p.kw.map((_, h) => h + ' h'), [{ name: 'Moyenne', color: 'var(--s1)', values: p.kw }], { w: 360, h: 200, unit: 'kW', min: 0, area: true, dec: 2, aria: 'Profil horaire moyen' });
   }

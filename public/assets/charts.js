@@ -131,7 +131,7 @@ const Charts = (() => {
   const sliceOpts = (opts, a, b) => Object.assign({}, opts, opts.tips ? { tips: opts.tips.slice(a, b + 1) } : {}, opts.major ? { major: opts.major.slice(a, b + 1) } : {});
   const slice = (series, a, b) => series.map(s => Object.assign({}, s, { values: s.values.slice(a, b + 1) }));
 
-  /** Barres empilées. series : [{name, color, values[]}] dans l'ordre d'empilement. */
+  /** Barres empilées. series : [{name, color, values[]}] dans l'ordre d'empilement. opts.dec : décimales de l'infobulle (1). */
   function stacked(el, labels, series, opts = {}) {
     if (!labels.length) return empty(el);
     zoomable(el, labels.length, opts, (a, b) => drawStacked(el, labels.slice(a, b + 1), slice(series, a, b), sliceOpts(opts, a, b)));
@@ -161,14 +161,14 @@ const Charts = (() => {
         if (el.classList.contains('zooming')) return;
         const i = +h.dataset.i;
         const rows = series.map(sr => [sr.name, sr.values[i] || 0]).filter(r => r[1] > 0.005).sort((a, b) => b[1] - a[1]).slice(0, 6);
-        showTip(e, `<b>${esc((opts.tips || labels)[i])} : ${fmt(totals[i])} ${opts.unit || ''}</b><br>${rows.map(r => `${esc(r[0])} ${fmt(r[1])}`).join('<br>')}`);
+        showTip(e, `<b>${esc((opts.tips || labels)[i])} : ${fmt(totals[i], opts.dec)} ${opts.unit || ''}</b><br>${rows.map(r => `${esc(r[0])} ${fmt(r[1], opts.dec)}`).join('<br>')}`);
       });
       h.addEventListener('mouseleave', hideTip);
     });
     return { W, L, T, pw, ph, idx: p => Math.max(0, Math.min(n - 1, Math.floor((p - L) / bw))) };
   }
 
-  /** Barres horizontales triées. rows : [{name, value, color}] */
+  /** Barres horizontales triées. rows : [{name, value, color}]. opts.dec : décimales des valeurs (0 à côté des barres, 1 dans l'infobulle). */
   function hbars(el, rows, opts = {}) {
     rows = rows.filter(r => r.value > 0).sort((a, b) => b.value - a.value);
     if (!rows.length) return empty(el);
@@ -177,13 +177,13 @@ const Charts = (() => {
     let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.aria || '')}">`;
     rows.forEach((r, i) => {
       const w = (W - L - R) * r.value / max, yy = i * rowH + 4;
-      s += `<text x="${L - 8}" y="${yy + 13}" text-anchor="end">${esc(r.name)}</text><rect x="${L}" y="${yy + 3}" width="${Math.max(1, w)}" height="13" rx="3" fill="${r.color}"/><text x="${L + w + 6}" y="${yy + 13}">${fmt(r.value, 0)}</text>`;
+      s += `<text x="${L - 8}" y="${yy + 13}" text-anchor="end">${esc(r.name)}</text><rect x="${L}" y="${yy + 3}" width="${Math.max(1, w)}" height="13" rx="3" fill="${r.color}"/><text x="${L + w + 6}" y="${yy + 13}">${fmt(r.value, opts.dec ?? 0)}</text>`;
       s += `<rect class="hit" data-i="${i}" x="0" y="${yy}" width="${W}" height="${rowH}"/>`;
     });
     el.innerHTML = s + '</svg>';
     el.querySelectorAll('.hit').forEach(h => {
       const r = rows[+h.dataset.i];
-      h.addEventListener('mousemove', e => showTip(e, `<b>${esc(r.name)}</b><br>${fmt(r.value)} ${opts.unit || ''}, ${fmt(r.value / total * 100, 0)} %`));
+      h.addEventListener('mousemove', e => showTip(e, `<b>${esc(r.name)}</b><br>${fmt(r.value, opts.dec)} ${opts.unit || ''}, ${fmt(r.value / total * 100, 0)} %`));
       h.addEventListener('mouseleave', hideTip);
     });
   }

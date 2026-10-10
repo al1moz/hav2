@@ -104,7 +104,7 @@ pour la comparer à l'ancien site.
 | `GET /api/v1/latest` | read | dernières valeurs et état de chaque source (alerte d'absence de données) |
 | `GET /api/v1/series?metric=&from=&to=&step=raw\|hour\|day` | read | courbe |
 | `GET /api/v1/summary?metric=&period=day\|month\|year&from=&to=` | read | totaux, moyennes, coût |
-| `GET /api/v1/dashboard`, `breakdown`, `profile`, `ecs`, `compare` | read | données préparées pour les pages |
+| `GET /api/v1/dashboard`, `breakdown`, `cost`, `profile`, `ecs`, `compare` | read | données préparées pour les pages |
 | `POST /api/v1/chat` | session + CSRF | question à Claude, réponse en lignes JSON |
 
 Les routes de lecture acceptent aussi la session du site (utilisées par les pages).

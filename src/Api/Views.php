@@ -8,6 +8,7 @@ use Conso\Db;
 use Conso\Ecs;
 use Conso\Http;
 use Conso\Metrics;
+use Conso\Prices;
 use Conso\Settings;
 use Conso\Time;
 use Conso\Config;
@@ -70,7 +71,7 @@ final class Views
 
         $alertDays = Settings::int('ecs_alert_days', 7);
         $ecsRecent = Ecs::episodes($now - $alertDays * 86400);
-        $price = self::priceAt(Time::localDate($now));
+        $price = Prices::kwh(Time::localDate($now));
 
         Http::json(200, [
             'now' => Time::iso($now),
@@ -94,12 +95,17 @@ final class Views
      * GET /api/v1/breakdown?from=AAAA-MM-JJ&to=AAAA-MM-JJ&period=day|month|year
      * ou period=hour avec from/to en date ISO (24 dernières heures par défaut).
      * kWh du compteur Linky et de chaque circuit mesuré, « reste » = Linky moins les circuits.
+     * Coûts en euros au tarif de chaque jour : cost (Linky), circuits_cost, rest_cost, et subscription,
+     * la part de l'abonnement (jours ou heures où le Linky a des données, la journée ou l'heure en cours au prorata).
      */
     public static function breakdown(): void
     {
         if (!Auth::requireRead()) {
             return;
         }
+        $now = time();
+        $today = Time::localDate($now);
+        $todayShare = self::elapsedToday($now);
         $hourly = Http::query('period') === 'hour';
         if ($hourly) {
             // Heure par heure : from/to en date ISO (par défaut les 24 dernières heures), 8 jours au plus.
@@ -139,33 +145,68 @@ final class Views
                     array_merge($ids, [Time::toDb(Time::hourStart((int) $fromTs)), Time::toDb((int) $toTs)])
                 );
             } else {
+                // Jour par jour (chaque jour à son prix), regroupé ensuite par mois ou par année.
                 $data = Db::all(
-                    "SELECT metric_id, LEFT(day, $length) AS p, SUM(energy_wh) AS wh, SUM(n) AS n FROM sample_daily
-                      WHERE metric_id IN ($place) AND day BETWEEN ? AND ? GROUP BY metric_id, p ORDER BY p",
+                    "SELECT metric_id, day AS p, energy_wh AS wh, n FROM sample_daily
+                      WHERE metric_id IN ($place) AND day BETWEEN ? AND ? ORDER BY day",
                     array_merge($ids, [$from, $to])
                 );
             }
+            $currentHour = Time::hourStart($now);
             foreach ($data as $r) {
-                $p = $hourly ? Time::iso(Time::fromDb($r['p'])) : $r['p'];
-                if (!isset($rows[$p])) {
-                    $rows[$p] = ['period' => $p, 'total' => null, 'circuits' => [], 'n_total' => 0, 'n_circuits' => 0];
-                }
-                $kwh = round((float) $r['wh'] / 1000, 3);
-                if ($total !== null && (int) $r['metric_id'] === $total['id']) {
-                    $rows[$p]['total'] = $kwh;
-                    $rows[$p]['n_total'] = (int) $r['n'];
+                if ($hourly) {
+                    $ts = Time::fromDb($r['p']);
+                    $p = Time::iso($ts);
+                    $day = Time::localDate($ts);
+                    $days = ($ts === $currentHour ? ($now - $ts) / 3600 : 1) / 24;
                 } else {
-                    $rows[$p]['circuits'][$codeById[(int) $r['metric_id']]] = $kwh;
-                    $rows[$p]['n_circuits'] = max($rows[$p]['n_circuits'], (int) $r['n']);
+                    $day = $r['p'];
+                    $p = substr($day, 0, $length);
+                    $days = $day === $today ? $todayShare : 1;
                 }
+                if (!isset($rows[$p])) {
+                    $rows[$p] = ['period' => $p, 'total' => null, 'circuits' => [], 'cost' => null, 'circuits_cost' => [],
+                        'subscription' => 0.0, 'n_total' => 0, 'n_circuits' => []];
+                }
+                $row = &$rows[$p];
+                $wh = (float) $r['wh'];
+                $eur = $wh / 1000 * Prices::kwh($day);
+                if ($total !== null && (int) $r['metric_id'] === $total['id']) {
+                    $row['total'] = ($row['total'] ?? 0) + $wh;
+                    $row['cost'] = ($row['cost'] ?? 0) + $eur;
+                    $row['subscription'] += $days * Prices::subscriptionPerDay($day);
+                    $row['n_total'] += (int) $r['n'];
+                } else {
+                    $code = $codeById[(int) $r['metric_id']];
+                    $row['circuits'][$code] = ($row['circuits'][$code] ?? 0) + $wh;
+                    $row['circuits_cost'][$code] = ($row['circuits_cost'][$code] ?? 0) + $eur;
+                    $row['n_circuits'][$code] = ($row['n_circuits'][$code] ?? 0) + (int) $r['n'];
+                }
+                unset($row);
             }
         }
+        $kwh = function (float $wh): float {
+            return round($wh / 1000, 3);
+        };
+        $euros = function (float $eur): float {
+            return round($eur, 4);
+        };
         foreach ($rows as &$row) {
-            $sum = array_sum($row['circuits']);
-            $row['rest'] = $row['total'] === null ? null : round(max(0, $row['total'] - $sum), 3);
+            $rest = $row['total'] === null ? null : max(0, $row['total'] - array_sum($row['circuits']));
+            $restCost = $row['cost'] === null ? null : max(0, $row['cost'] - array_sum($row['circuits_cost']));
             // Part de la période où les Shelly répondaient (relevés circuits / relevés Linky).
-            $row['coverage'] = $row['n_total'] > 0 ? round(min(1, $row['n_circuits'] / $row['n_total']), 2) : null;
-            unset($row['n_total'], $row['n_circuits']);
+            $nCircuits = $row['n_circuits'] ? max($row['n_circuits']) : 0;
+            $row = [
+                'period' => $row['period'],
+                'total' => $row['total'] === null ? null : $kwh($row['total']),
+                'circuits' => array_map($kwh, $row['circuits']),
+                'rest' => $rest === null ? null : $kwh($rest),
+                'coverage' => $row['n_total'] > 0 ? round(min(1, $nCircuits / $row['n_total']), 2) : null,
+                'cost' => $row['cost'] === null ? null : $euros($row['cost']),
+                'circuits_cost' => array_map($euros, $row['circuits_cost']),
+                'rest_cost' => $restCost === null ? null : $euros($restCost),
+                'subscription' => $euros($row['subscription']),
+            ];
         }
         unset($row);
         Http::json(200, [
@@ -174,6 +215,53 @@ final class Views
                 return ['code' => $m['code'], 'label' => $m['label']];
             }, $circuits),
             'rows' => array_values($rows),
+        ]);
+    }
+
+    /**
+     * GET /api/v1/cost?period=24h|7|30|12m|y : kWh et coût du compteur Linky sur la période qui se termine
+     * maintenant (24 dernières heures, 7 ou 30 derniers jours, 12 derniers mois, année en cours), comme les
+     * graphiques de la page Électricité, et sur la même durée juste avant (un an avant pour 12m et y).
+     */
+    public static function cost(): void
+    {
+        if (!Auth::requireRead()) {
+            return;
+        }
+        $now = time();
+        $local = (new \DateTimeImmutable('@' . $now))->setTimezone(Config::timezone());
+        $midnight = $local->setTime(0, 0);
+        $period = Http::query('period') ?? '30';
+        switch ($period) {
+            case '24h':
+                $start = Time::hourStart($now) - 23 * 3600;
+                $previous = [$start - 86400, $now - 86400];
+                break;
+            case '7':
+            case '30':
+                $first = $midnight->modify('-' . ((int) $period - 1) . ' days');
+                $start = $first->getTimestamp();
+                $previous = [$first->modify('-' . $period . ' days')->getTimestamp(), $local->modify('-' . $period . ' days')->getTimestamp()];
+                break;
+            case '12m':
+            case 'y':
+                $first = $period === 'y' ? $midnight->setDate((int) $local->format('Y'), 1, 1) : $midnight->modify('first day of this month')->modify('-11 months');
+                $start = $first->getTimestamp();
+                $previous = [$first->modify('-1 year')->getTimestamp(), $local->modify('-1 year')->getTimestamp()];
+                break;
+            default:
+                Http::error(422, 'invalid_period', 'period : 24h, 7, 30, 12m ou y.');
+                return;
+        }
+        $total = Metrics::find(self::TOTAL);
+        [$since, $price, $month] = Prices::at(Time::localDate($now));
+        Http::json(200, [
+            'period' => $period,
+            'current' => self::costBetween($total, $start, $now, $now),
+            'previous' => self::costBetween($total, $previous[0], $previous[1], $now),
+            'kwh_price' => $price,
+            'price_since' => $since === '' ? null : $since,
+            'subscription_month' => $month,
         ]);
     }
 
@@ -226,7 +314,7 @@ final class Views
             'since' => $first['d'] ?? null,
             'count' => count($episodes),
             'kwh' => round($kwh, 2),
-            'cost_eur' => round($kwh * self::priceAt(Time::localDate(time())), 2),
+            'cost_eur' => round($kwh * Prices::kwh(Time::localDate(time())), 2),
             'by_year' => $byYear,
             'episodes' => $episodes,
         ]);
@@ -320,15 +408,58 @@ final class Views
         }
         $wh = (float) $full['wh'];
         if ($partial !== null && $lastHour >= $from) {
-            $wh += (float) $partial['energy_wh'] * min(1, ($to - $lastHour) / 3600);
+            // L'heure en cours s'arrête déjà au dernier relevé : elle compte entière.
+            $wh += (float) $partial['energy_wh'] * ($lastHour + 3600 > time() ? 1 : min(1, ($to - $lastHour) / 3600));
         }
         return round($wh / 1000, 2);
     }
 
-    private static function priceAt(string $day): float
+    /**
+     * kWh, coût de l'énergie et part de l'abonnement entre deux instants, d'après les agrégats horaires.
+     * Une heure entamée compte au prorata, sauf l'heure en cours : son énergie s'arrête déjà au dernier relevé.
+     * hours : heures où le Linky a des données (pour les moyennes).
+     * @param array<string,mixed>|null $metric
+     * @return array<string,mixed>
+     */
+    private static function costBetween(?array $metric, int $from, int $to, int $now): array
     {
-        $row = Db::one('SELECT kwh_price FROM price WHERE valid_from <= ? ORDER BY valid_from DESC LIMIT 1', [$day]);
-        return $row === null ? 0.0 : (float) $row['kwh_price'];
+        $wh = $eur = $subscription = $hours = 0.0;
+        $rows = $metric === null ? [] : Db::all(
+            'SELECT hour, energy_wh FROM sample_hourly WHERE metric_id = ? AND hour >= ? AND hour < ?',
+            [$metric['id'], Time::toDb(Time::hourStart($from)), Time::toDb($to)]
+        );
+        foreach ($rows as $r) {
+            $h = Time::fromDb($r['hour']);
+            $share = (min($to, $h + 3600) - max($from, $h)) / 3600;
+            if ($share <= 0) {
+                continue;
+            }
+            $day = Time::localDate($h);
+            $e = (float) $r['energy_wh'] * ($h + 3600 > $now ? 1 : $share);
+            $wh += $e;
+            $eur += $e / 1000 * Prices::kwh($day);
+            $subscription += $share / 24 * Prices::subscriptionPerDay($day);
+            $hours += $share;
+        }
+        $found = $hours > 0;
+        return [
+            'from' => Time::iso($from),
+            'to' => Time::iso($to),
+            'kwh' => $found ? round($wh / 1000, 2) : null,
+            'energy_eur' => $found ? round($eur, 2) : null,
+            'subscription_eur' => round($subscription, 2),
+            'eur' => $found ? round($eur + $subscription, 2) : null,
+            'kwh_price' => $wh > 0 ? round($eur / $wh * 1000, 5) : null,
+            'hours' => round($hours, 2),
+        ];
+    }
+
+    /** Part écoulée de la journée locale en cours (0 à 1), journées de 23 ou 25 h comprises. */
+    private static function elapsedToday(int $now): float
+    {
+        $midnight = (new \DateTimeImmutable('@' . $now))->setTimezone(Config::timezone())->setTime(0, 0);
+        $length = $midnight->modify('+1 day')->getTimestamp() - $midnight->getTimestamp();
+        return ($now - $midnight->getTimestamp()) / $length;
     }
 
     /** @return array{0:string,1:string} dates locales incluses */

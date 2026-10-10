@@ -29,6 +29,7 @@ $router->add('GET', '/api/v1/summary', [Api\Read::class, 'summary']);
 
 $router->add('GET', '/api/v1/dashboard', [Api\Views::class, 'dashboard']);
 $router->add('GET', '/api/v1/breakdown', [Api\Views::class, 'breakdown']);
+$router->add('GET', '/api/v1/cost', [Api\Views::class, 'cost']);
 $router->add('GET', '/api/v1/profile', [Api\Views::class, 'profile']);
 $router->add('GET', '/api/v1/ecs', [Api\Views::class, 'ecs']);
 $router->add('GET', '/api/v1/compare', [Api\Views::class, 'compare']);
