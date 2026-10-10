@@ -208,6 +208,34 @@ HTML
         );
     }
 
+    public static function weather(): void
+    {
+        if (!self::guard()) {
+            return;
+        }
+        View::page('/meteo', 'Météo', <<<'HTML'
+<h1>Météo</h1>
+<p class="sub" id="wx-sub">Vent observé aux stations autour de l'aéroclub et prévisions d'aujourd'hui et de demain (Météo Concept).</p>
+<div id="wx-problems"></div>
+<div class="chartbox wx-now">
+  <h3>Vent observé</h3><p class="cap" id="wx-now-cap">Chargement…</p>
+  <div class="wx-grid"><div class="wx-rose" id="wx-rose"></div><div id="wx-now"></div></div>
+</div>
+<div class="chartbox"><h3>Ciel</h3><p class="cap">Nuages, pluie et hauteur des nuages : observés (METAR) et prévus (Météo Concept et TAF).</p><div class="wx-skygrid" id="wx-sky"></div></div>
+<div class="chartbox"><h3>Stations</h3><p class="cap" id="wx-st-cap"></p><div class="tbl" id="wx-stations"></div></div>
+<h2 class="section">Aujourd'hui</h2>
+<div class="wx-periods" id="wx-today"></div>
+<div class="chartbox" id="wx-hours-box" hidden><h3>Prochaines heures</h3><p class="cap">Moyenne des points de prévision. Flèche : sens du vent.</p><div class="tbl" id="wx-hours"></div></div>
+<h2 class="section" id="wx-tomorrow-title">Demain</h2>
+<div class="wx-periods" id="wx-tomorrow"></div>
+<div class="chartbox"><h3 id="wx-taf-title">TAF</h3><p class="cap" id="wx-taf-cap"></p><div class="tbl" id="wx-taf"></div></div>
+<div class="chartbox"><h3 id="wx-metar-title">METAR</h3><div id="wx-metar"></div></div>
+<div class="chartbox"><h3>Soleil</h3><p class="cap">Nuit aéronautique : de la fin du crépuscule civil à l'aube civile.</p><div class="tiles" id="wx-sun"></div></div>
+<p class="note" id="wx-foot"></p>
+HTML
+        );
+    }
+
     public static function admin(): void
     {
         if (!self::guard()) {

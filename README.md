@@ -67,6 +67,24 @@ Ne pas la diffuser. Le serveur web doit alors passer les adresses en `.php` au r
 De nuit aéronautique (fin du crépuscule civil à l'aube civile, à la position de la station donnée
 par le METAR), la case Condition affiche « NUIT » au lieu de VFR, avec l'heure du prochain changement.
 
+## Page Météo
+
+`/meteo` : la météo pour voler à l'aéroclub, lue sur l'API de [Météo Concept](https://api.meteo-concept.com/documentation).
+
+- Jeton dans `.env` : `METEO_CONCEPT_TOKEN=…` (forfait gratuit : 500 appels par jour).
+- Administration, section Météo : position de l'aéroclub (jamais dans le dépôt), stations du vent observé
+  (dans un rayon de 30 km ; sans choix, les 4 plus proches qui mesurent le vent), seuils de vent de travers
+  et de rafales. Pistes et aérodrome du METAR et du TAF : section Tablette.
+- Vent observé : moyenne des stations retenues, pondérée par la distance, dessinée sur une rose des vents
+  avec les pistes, la flèche du vent et une manche à air ; vent de face et de travers sur la piste la plus favorable.
+- Prévisions d'aujourd'hui et de demain par période (nuit, matin, après-midi, soir) : moyenne de l'aéroclub
+  et des stations retenues, chaque point de grille compté une fois. Pastille verte, orange ou rouge selon
+  le vent de travers (rafales comprises), les rafales, l'orage, le brouillard.
+- Ciel : nuages, pluie et hauteur des nuages observés (METAR) et prévus (Météo Concept, TAF décodé) ;
+  plafond prévu par le TAF dans chaque période qu'il couvre.
+- Cache dans MySQL (`weather_cache`) : observations toutes les 10 min, prévisions toutes les heures. Le compteur
+  d'appels du jour est celui que renvoie Météo Concept (en-tête `X-Api-Calls`) ; le site s'arrête à 90 % du quota.
+
 ## Demander à Claude
 
 Un bouton en bas de chaque page ouvre une discussion : Claude (API d'Anthropic, modèle `claude-opus-5-5`)
@@ -104,7 +122,7 @@ pour la comparer à l'ancien site.
 | `GET /api/v1/latest` | read | dernières valeurs et état de chaque source (alerte d'absence de données) |
 | `GET /api/v1/series?metric=&from=&to=&step=raw\|hour\|day` | read | courbe |
 | `GET /api/v1/summary?metric=&period=day\|month\|year&from=&to=` | read | totaux, moyennes, coût |
-| `GET /api/v1/dashboard`, `breakdown`, `cost`, `profile`, `ecs`, `compare` | read | données préparées pour les pages |
+| `GET /api/v1/dashboard`, `breakdown`, `cost`, `profile`, `ecs`, `compare`, `weather` | read | données préparées pour les pages (`weather` peut appeler Météo Concept) |
 | `POST /api/v1/chat` | session + CSRF | question à Claude, réponse en lignes JSON |
 
 Les routes de lecture acceptent aussi la session du site (utilisées par les pages).
@@ -139,7 +157,7 @@ Réponse `202` : `{"accepted": 3, "duplicates": 0, "late": 0, "rejected": 0, "er
 ```
 public/index.php   seul fichier exposé : routes de l'API et des pages
 bootstrap.php      chargement automatique des classes de src/ et du .env
-src/               Config, Db, Router, Http, Auth, Session, Time, Units, Energy, Aggregates, Ingest, Ecs, View, Pages, Admin, Tablet, Metar, Claude, Chat, ChatTools, Api/
+src/               Config, Db, Router, Http, Auth, Session, Time, Units, Energy, Aggregates, Ingest, Ecs, View, Pages, Admin, Tablet, Metar, Weather, Claude, Chat, ChatTools, Api/
 public/assets/     app.css (8 thèmes), charts.js (graphiques SVG), app.js (remplissage des pages), chat.js (Demander à Claude), tablet.css et tablet.js (page tablette), fonts/ (Orbitron, licence OFL)
 sql/               schéma et données de départ
 bin/               migrate.php, password.php, token.php, migrate-releve.php, fake-data.php

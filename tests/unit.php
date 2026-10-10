@@ -11,6 +11,7 @@ use Conso\Energy;
 use Conso\Metar;
 use Conso\Time;
 use Conso\Units;
+use Conso\Weather;
 
 $failures = 0;
 $check = function (string $name, bool $ok) use (&$failures): void {
@@ -126,6 +127,69 @@ $usage = json_decode('{"input_tokens":10,"output_tokens":5,"iterations":[{"type"
     . '{"type":"fallback_message","input_tokens":10,"output_tokens":5,"cache_read_input_tokens":1000}]}');
 $check('jetons : toutes les tentatives comptées', Claude::tokens($usage) === ['in' => 110, 'out' => 5, 'cache_write' => 0, 'cache_read' => 1000]);
 $check('coût : 1 M en entrée + 1 M en sortie = 24 $', $near(Claude::cost(['in' => 1000000, 'out' => 1000000, 'cache_write' => 0, 'cache_read' => 0]), 24.0));
+
+// Météo : moyennes des points, vent sur la piste, pastilles, réponses de Météo Concept.
+$check('position : virgule et espace', Weather::parsePoint('46.5, 2.25') === [46.5, 2.25]);
+$check('position : hors limites refusée', Weather::parsePoint('95, 10') === null && Weather::parsePoint('nord') === null);
+$b = Weather::blend([['w' => 1, 'wind' => 10, 'dir' => 350, 'gust' => 20, 'weather' => 1], ['w' => 1, 'wind' => 10, 'dir' => 10, 'gust' => 30, 'weather' => 3]]);
+$check('moyenne : direction 350° et 10° = 0°', $b['dir'] === 0);
+$check('moyenne : vent et rafales', $near((float) $b['wind'], 10.0) && $near((float) $b['gust'], 25.0) && $b['gust_max'] == 30);
+$check('moyenne : temps à égalité = le plus mauvais', $b['weather'] === 3 && $b['label'] === 'Nuageux');
+$b = Weather::blend([['w' => 3, 'wind' => 0, 'weather' => 0, 'probafog' => 10], ['w' => 1, 'wind' => 20, 'weather' => 104, 'probafog' => 60]]);
+$check('moyenne pondérée', $near((float) $b['wind'], 5.0));
+$check('moyenne : code le plus fréquent', $b['weather'] === 0);
+$check('moyenne : risque de brouillard au plus haut', $b['probafog'] == 60);
+$check('pistes : sens opposé ajouté', Weather::bothWays([70]) === [70, 250]);
+$rw = Weather::runwayWind(230.0, 22.0, 35.0, [70, 250]);
+$check('vent sur la piste : 25, face 21, travers 8 de gauche', $rw['runway'] === 250 && $rw['head'] === 21 && $rw['cross'] === -8 && $rw['gust_cross'] === -12);
+$check('vent sur la piste : de droite positif', Weather::runwayWind(270.0, 10.0, null, [250])['cross'] === 3);
+$check('vent variable : tout en travers', Weather::runwayWind(null, 12.0, null, [250])['cross'] === 12);
+$lim = ['cross_warn' => 18, 'cross_max' => 25, 'gust_warn' => 37, 'gust_max' => 46];
+$check('pastille : vent faible = vert', Weather::assess(['wind' => 10, 'gust' => 15, 'dir' => 250], [70, 250], $lim, false)['level'] === 'ok');
+$check('pastille : travers en rafale 26 = rouge', Weather::assess(['wind' => 15, 'gust' => 26, 'dir' => 340], [70, 250], $lim, false)['level'] === 'bad');
+$check('pastille : travers 20 = orange', Weather::assess(['wind' => 20, 'gust' => 20, 'dir' => 340], [70, 250], $lim, false)['level'] === 'warn');
+$check('pastille : rafales 40 = orange', Weather::assess(['wind' => 20, 'gust' => 40, 'dir' => 250], [70, 250], $lim, false)['level'] === 'warn');
+$check('pastille : orage = rouge', Weather::assess(['wind' => 5, 'dir' => 250, 'weather' => 104], [250], $lim, true)['level'] === 'bad');
+$check('pastille : brouillard probable = orange', Weather::assess(['wind' => 5, 'dir' => 250, 'weather' => 3, 'probafog' => 60], [250], $lim, true)['level'] === 'warn');
+$check('pastille : observation sans le temps', Weather::assess(['wind' => 5, 'dir' => 250, 'weather' => 104], [250], $lim, false)['level'] === 'ok');
+$f = ['forecast' => [
+    [['latitude' => 46.62, 'longitude' => 2.56, 'day' => 0, 'period' => 3, 'datetime' => '2026-10-10T20:00:00+0200', 'wind10m' => 15, 'gust10m' => 30, 'dirwind10m' => 290, 'weather' => 3, 'temp2m' => 13]],
+    [['latitude' => 46.62, 'longitude' => 2.56, 'day' => 1, 'period' => 1, 'datetime' => '2026-10-11T08:00:00+0200', 'wind10m' => 12, 'gust10m' => 28, 'dirwind10m' => 250, 'weather' => 10, 'temp2m' => 11],
+     ['latitude' => 46.62, 'longitude' => 2.56, 'day' => 1, 'period' => 2, 'datetime' => '2026-10-13T14:00:00+0200', 'wind10m' => 12, 'weather' => 10]],
+]];
+$p = Weather::parsePeriods($f, '2026-10-12');
+$check('périodes : rangées par date réelle, au-delà de demain ignorées', count($p['items']) === 2 && Time::localDate($p['items'][1]['ts']) === '2026-10-11' && $p['items'][1]['period'] === 1);
+$check('périodes : point de grille', $p['grid'] === '46.6200,2.5600');
+$check('périodes : réponse vide', Weather::parsePeriods(['code' => 403], '2026-10-12') === null);
+$st = Weather::parseStations([
+    ['station' => ['name' => 'B', 'uuid' => str_repeat('b', 36), 'latitude' => 46.7, 'longitude' => 2.5], 'observation' => []],
+    ['station' => ['name' => 'A', 'uuid' => str_repeat('a', 36), 'latitude' => 46.51, 'longitude' => 2.5],
+     'observation' => ['time' => '2026-10-10T22:25:00+00:00', 'wind_10m' => ['value' => '4.8'], 'windgust_10m' => ['value' => '9.7'], 'wind_direction' => ['value' => '270']]],
+], [46.5, 2.5]);
+$check('stations : triées par distance, sans relevé = vides', $st[0]['name'] === 'A' && $st[0]['wind'] === 4.8 && $st[0]['dir'] === 270.0 && $st[1]['ts'] === null && $st[1]['wind'] === null);
+$check('TAF : une ligne par groupe', Metar::tafLines('TAF LFPG 101700Z 1018/1118 29010KT 9999 BKN030 PROB30 TEMPO 1018/1020 4000 SHRA BECMG 1018/1021 23005KT TEMPO 1100/1104 BR=')
+    === ['TAF LFPG 101700Z 1018/1118 29010KT 9999 BKN030', 'PROB30 TEMPO 1018/1020 4000 SHRA', 'BECMG 1018/1021 23005KT', 'TEMPO 1100/1104 BR']);
+
+// METAR et TAF décodés : temps présent, couches, plafond, groupes du TAF.
+$g = Metar::decodeGroup(['23006KT', '9999', '-SHRA', 'FEW020', 'BKN047', 'OVC080']);
+$check('METAR : plafond = plus basse couche BKN', $g['ceiling'] === 4700 && count($g['layers']) === 3 && $g['visibility'] === 9999);
+$check('METAR : averses faibles, pictogramme d\'averses', $g['weather'] === ['Averses faibles de pluie'] && $g['code'] === 43);
+$check('METAR : orage fort avec pluie', Metar::decodeGroup(['+TSRA'])['label'] === 'Orage fort avec pluie');
+$check('METAR : brouillard givrant', Metar::decodeGroup(['FZFG', 'VV002'])['label'] === 'Brouillard givrant' && Metar::decodeGroup(['FZFG', 'VV002'])['ceiling'] === 200);
+$check('METAR : CAVOK = ciel clair, 10 km', Metar::decodeGroup(['CAVOK'])['code'] === 0 && Metar::decodeGroup(['CAVOK'])['visibility'] === 10000);
+$check('METAR : nuages seuls, pas de plafond', Metar::decodeGroup(['SCT030'])['ceiling'] === null && Metar::decodeGroup(['SCT030'])['label'] === 'Nuageux');
+$taf = Metar::parseTaf('TAF LFPG 101700Z 1018/1118 29010KT 9999 BKN030 PROB30 TEMPO 1018/1020 4000 SHRA BECMG 1018/1021 23005KT TEMPO 1100/1104 BR BKN008', Time::parse('2026-10-10T17:00:00Z'));
+$check('TAF : validité', $taf['from'] === Time::parse('2026-10-10T18:00:00Z') && $taf['to'] === Time::parse('2026-10-11T18:00:00Z'));
+$check('TAF : groupes', array_column($taf['groups'], 'type') === ['BASE', 'TEMPO', 'BECMG', 'TEMPO'] && $taf['groups'][1]['prob'] === 30);
+$w = Metar::tafWindow($taf, Time::parse('2026-10-11T00:00:00Z'), Time::parse('2026-10-11T06:00:00Z'));
+$check('TAF : plafond de la période et temporairement 800 ft', $w['main']['ceiling'] === 3000 && $w['temp']['ceiling'] === 800 && $w['temp']['weather'] === ['Brume']);
+$check('TAF : période hors validité', Metar::tafWindow($taf, Time::parse('2026-10-12T06:00:00Z'), Time::parse('2026-10-12T12:00:00Z')) === null);
+$a = Weather::withTaf(['level' => 'ok', 'reasons' => [], 'runway' => null], $w);
+$check('pastille : temporairement plafond 800 ft = orange', $a['level'] === 'warn' && $a['reasons'] === ['temporairement plafond 800 ft']);
+$fm = Metar::parseTaf('TAF LFPG 101700Z 1018/1118 29010KT 9999 SCT030 FM110300 20015KT 3000 RA OVC006', Time::parse('2026-10-10T17:00:00Z'));
+$w = Metar::tafWindow($fm, Time::parse('2026-10-11T04:00:00Z'), Time::parse('2026-10-11T06:00:00Z'));
+$check('TAF : FM remplace la prévision', $w['main']['ceiling'] === 600 && $w['main']['visibility'] === 3000
+    && Weather::withTaf(['level' => 'ok', 'reasons' => [], 'runway' => null], $w)['level'] === 'bad');
 
 echo $failures === 0 ? "\nTous les tests passent.\n" : "\n$failures test(s) en échec.\n";
 exit($failures === 0 ? 0 : 1);

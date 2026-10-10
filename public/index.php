@@ -33,6 +33,7 @@ $router->add('GET', '/api/v1/cost', [Api\Views::class, 'cost']);
 $router->add('GET', '/api/v1/profile', [Api\Views::class, 'profile']);
 $router->add('GET', '/api/v1/ecs', [Api\Views::class, 'ecs']);
 $router->add('GET', '/api/v1/compare', [Api\Views::class, 'compare']);
+$router->add('GET', '/api/v1/weather', [Api\Views::class, 'weather']);
 $router->add('POST', '/api/v1/chat', [Chat::class, 'post']);
 
 // Pages du site (connexion obligatoire)
@@ -45,6 +46,7 @@ $router->add('GET', '/chauffage', [Pages::class, 'heating']);
 $router->add('GET', '/temperatures', [Pages::class, 'temperatures']);
 $router->add('GET', '/humidite', [Pages::class, 'humidity']);
 $router->add('GET', '/comparer', [Pages::class, 'compare']);
+$router->add('GET', '/meteo', [Pages::class, 'weather']);
 $router->add('GET', '/admin', [Pages::class, 'admin']);
 
 // Page tablette (session du site ou jeton « tablet »)

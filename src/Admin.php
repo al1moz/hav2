@@ -64,6 +64,31 @@ final class Admin
                 ]);
                 return 'Réglages de la tablette enregistrés.';
 
+            case 'weather':
+                $center = trim((string) ($post['weather_center'] ?? ''));
+                if ($center !== '' && Weather::parsePoint($center) === null) {
+                    return 'Position de l\'aéroclub : latitude et longitude en degrés décimaux, séparées par une virgule (ex. 46.50, 2.50).';
+                }
+                $stations = array_values(array_filter(array_map('strval', (array) ($post['weather_stations'] ?? [])), function (string $id): bool {
+                    return (bool) preg_match('/^[0-9a-f-]{36}$/', $id);
+                }));
+                if (count($stations) > Weather::MAX_STATIONS) {
+                    return 'Stations : ' . Weather::MAX_STATIONS . ' au plus (chacune coûte deux appels à Météo Concept par heure).';
+                }
+                $limits = [];
+                foreach (['weather_cross_warn', 'weather_cross_max', 'weather_gust_warn', 'weather_gust_max'] as $k) {
+                    $v = trim((string) ($post[$k] ?? ''));
+                    if (!preg_match('/^\d{1,3}$/', $v) || (int) $v < 1 || (int) $v > 200) {
+                        return 'Seuils de vent : des nombres entiers de km/h, de 1 à 200.';
+                    }
+                    $limits[$k] = (string) (int) $v;
+                }
+                if ($limits['weather_cross_warn'] > $limits['weather_cross_max'] || $limits['weather_gust_warn'] > $limits['weather_gust_max']) {
+                    return 'Seuils de vent : la valeur orange doit être inférieure ou égale à la valeur rouge.';
+                }
+                self::set(['weather_center' => $center === '' ? '' : implode(', ', Weather::parsePoint($center)), 'weather_stations' => implode(',', $stations)] + $limits);
+                return 'Réglages de la météo enregistrés.';
+
             case 'chat':
                 $limit = (int) ($post['chat_daily_limit'] ?? 0);
                 $effort = (string) ($post['chat_effort'] ?? '');
@@ -205,6 +230,9 @@ final class Admin
                 . '</div><button type="submit">Enregistrer</button>')
             . '</section>';
 
+        // Météo
+        $out .= '<section class="panel" id="meteo-admin"><h2>Météo</h2>' . self::weatherPanel($form) . '</section>';
+
         // Discussion avec Claude
         $out .= '<section class="panel" id="chat-admin"><h2>Discussion avec Claude</h2>' . self::chatPanel($form) . '</section>';
 
@@ -261,6 +289,41 @@ final class Admin
             . '</div><button type="submit">Changer</button>') . '</section>';
 
         return $out;
+    }
+
+    private static function weatherPanel(callable $form): string
+    {
+        $h = [View::class, 'h'];
+        $token = Weather::token() !== '';
+        $out = '<p class="note">La page <a href="/meteo">Météo</a> lit Météo Concept : observations des stations autour de l\'aéroclub (un appel toutes les 10 minutes), '
+            . 'prévisions de l\'aéroclub et de chaque station retenue, moyennées (deux appels par point toutes les heures). '
+            . ($token ? 'Jeton METEO_CONCEPT_TOKEN trouvé dans le .env.' : '<strong>Jeton METEO_CONCEPT_TOKEN absent du .env : la page ne peut rien lire.</strong>')
+            . ' Appels aujourd\'hui selon Météo Concept : ' . Weather::callsToday() . ' sur ' . Weather::quota()['limit'] . ' (le site s\'arrête à ' . Weather::stopAt() . '). '
+            . 'Pistes et aérodrome du METAR et du TAF : section Tablette.</p>';
+
+        $stations = Weather::center() !== null ? Weather::stationsAround() : [];
+        $chosen = array_column(Weather::selected($stations), 'uuid');
+        $list = '';
+        foreach ($stations as $s) {
+            $wind = $s['wind'] !== null && $s['dir'] !== null;
+            $list .= '<label class="check"><input type="checkbox" name="weather_stations[]" value="' . $h($s['uuid']) . '"' . (in_array($s['uuid'], $chosen, true) ? ' checked' : '') . '> '
+                . $h($s['name']) . ' <small>' . number_format((float) $s['dist'], 1, ',', ' ') . ' km'
+                . ($wind ? ', vent ' . (int) round((float) $s['wind']) . ' km/h' : ($s['ts'] === null ? ', aucun relevé' : ', ne mesure pas le vent')) . '</small></label>';
+        }
+        $stationsField = '<fieldset><legend>Stations du vent observé (' . Weather::MAX_STATIONS . ' au plus)</legend>'
+            . ($list !== '' ? $list : '<small>Les stations dans un rayon de ' . Weather::RADIUS_KM . ' km s\'afficheront ici une fois la position enregistrée.</small>')
+            . (Weather::chosenIds() ? '' : ($list !== '' ? '<small>Aucune cochée : les ' . count($chosen) . ' plus proches qui mesurent le vent sont utilisées.</small>' : ''))
+            . '</fieldset>';
+
+        $limits = Weather::limits();
+        return $out . $form('weather',
+            '<div class="fields">'
+            . self::field('weather_center', 'Position de l\'aéroclub (latitude, longitude)', Settings::get('weather_center'), 'text', 'Degrés décimaux, ex. 46.50, 2.50. Rangée dans la base, jamais dans le dépôt.')
+            . self::field('weather_cross_warn', 'Vent de travers : orange dès (km/h)', (string) $limits['cross_warn'], 'number')
+            . self::field('weather_cross_max', 'Vent de travers maximal (km/h)', (string) $limits['cross_max'], 'number', 'Au-delà : rouge. Rafales comprises.')
+            . self::field('weather_gust_warn', 'Rafales : orange dès (km/h)', (string) $limits['gust_warn'], 'number')
+            . self::field('weather_gust_max', 'Rafales : rouge dès (km/h)', (string) $limits['gust_max'], 'number')
+            . '</div>' . $stationsField . '<button type="submit">Enregistrer</button>');
     }
 
     private static function chatPanel(callable $form): string

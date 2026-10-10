@@ -477,6 +477,283 @@
       `<tr><td>${esc(s.season)}</td><td>${s.days}</td><td>${fmt(s.dju, 0)}</td><td>${fmt(s.kwh, 0)}</td><td>${fmt(s.kwh_per_dju, 2)}</td></tr>`).join('')}</table>` : '';
   }
 
+  // =============== Météo ===============
+  // Vent observé (rose des vents avec les pistes, flèche du vent, manche à air), périodes d'aujourd'hui et de demain,
+  // METAR et TAF. Les calculs (moyennes, vent de travers, pastilles) sont faits par le serveur (src/Weather.php).
+  const CARD16 = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO'];
+  const LEVELS = { ok: 'Dans les limites', warn: 'Proche des limites', bad: 'Hors limites' };
+  const kmh = v => v === null || v === undefined ? '–' : fmt(v, 0);
+  const deg = d => d === null || d === undefined ? 'variable' : String(Math.round(d) % 360).padStart(3, '0') + '°';
+  const card16 = d => d === null || d === undefined ? '' : CARD16[Math.round(d / 22.5) % 16];
+  const rwyNum = r => String(Math.round(r / 10) || 36).padStart(2, '0');
+  const side = c => c > 0 ? 'de droite' : c < 0 ? 'de gauche' : '';
+  const hm = iso => iso ? timeFmt.format(new Date(iso)) : '–';
+  const COVER = { FEW: 'Peu nombreux (1 à 2/8)', SCT: 'Épars (3 à 4/8)', BKN: 'Fragmentés (5 à 7/8)', OVC: 'Couvert (8/8)', VV: 'Ciel invisible' };
+  const CLEAR = { CAVOK: 'CAVOK : pas de nuage sous 5 000 ft', NSC: 'Aucun nuage significatif', NCD: 'Aucun nuage détecté', SKC: 'Ciel clair', CLR: 'Ciel clair' };
+  /** Hauteur de nuages en pieds, avec les mètres. */
+  const feet = ft => ft === null || ft === undefined ? '–' : `${fmt(ft, 0)} ft (${fmt(Math.round(ft * 0.3048 / 10) * 10, 0)} m)`;
+  const visi = v => v === null || v === undefined ? '–' : v >= 9999 ? '10 km ou plus' : v >= 5000 ? fmt(v / 1000, 0) + ' km' : fmt(v, 0) + ' m';
+  /** Couches de nuages d'un METAR ou d'un groupe de TAF, une par ligne. */
+  const layers = s => s.clear ? [CLEAR[s.clear] || s.clear] : s.layers.map(l =>
+    `${COVER[l.cover]} à ${l.base === null ? '?' : feet(l.base)}${l.type === 'CB' ? ', cumulonimbus' : l.type === 'TCU' ? ', cumulus bourgeonnants' : ''}`);
+  const lower = t => t.charAt(0).toLowerCase() + t.slice(1);
+  /** Plafond, visibilité et temps prévus par le TAF sur une période. */
+  function tafText(w) {
+    if (!w) return '';
+    const m = w.main, t = w.temp;
+    let s = `plafond ${m.ceiling !== null ? fmt(m.ceiling, 0) + ' ft' : 'aucun'}`;
+    if (m.visibility !== null && m.visibility < 9999) s += `, visibilité ${visi(m.visibility)}`;
+    if (m.weather.length) s += ', ' + m.weather.map(lower).join(', ');
+    if (t) {
+      const bits = [];
+      if (t.ceiling !== null) bits.push('plafond ' + fmt(t.ceiling, 0) + ' ft');
+      if (t.visibility !== null) bits.push('visibilité ' + visi(t.visibility));
+      bits.push(...t.weather.map(lower));
+      if (bits.length) s += ` ; ${t.prob ? t.prob + ' % de risque, ' : ''}temporairement ${bits.join(', ')}`;
+    }
+    return s;
+  }
+  /** Petite flèche dans le sens où va le vent (il vient de d). */
+  const arrow = d => d === null || d === undefined ? ''
+    : `<svg class="wx-arr" viewBox="-10 -10 20 20" aria-hidden="true"><path transform="rotate(${(Math.round(d) + 180) % 360})" d="M0-8 5.5 5 0 2-5.5 5z"/></svg>`;
+
+  /** Famille de pictogramme d'un code de temps de Météo Concept. */
+  function skyKind(c) {
+    if (c === null || c === undefined) return null;
+    if ((c >= 100 && c <= 142)) return 'orage';
+    if (c === 235) return 'grele';
+    if (c === 6 || c === 7) return 'brouillard';
+    if ((c >= 20 && c <= 32) || (c >= 60 && c <= 78) || (c >= 220 && c <= 232)) return 'neige';
+    if (c >= 40 && c <= 48) return 'averses';
+    if (c >= 10) return 'pluie';
+    return ['soleil', 'peu', 'voile', 'nuageux', 'nuageux', 'couvert'][c] || 'nuageux';
+  }
+  /** Pictogramme du ciel, tracé au trait (couleur du texte du thème). La lune remplace le soleil la nuit. */
+  function sky(c, night) {
+    const k = skyKind(c); if (!k) return '';
+    const cloud = (x = 0, y = 0, s = 1) => `<path transform="translate(${x} ${y}) scale(${s})" d="M9 25h14.5a5.5 5.5 0 0 0 .6-11A7.5 7.5 0 0 0 9.8 12.6 6.2 6.2 0 0 0 9 25z"/>`;
+    const sun = (x, y, r) => night
+      ? `<path d="M${x + r * .3} ${y - r}a${r} ${r} 0 1 0 ${r * .9} ${r * 1.55}A${r * .78} ${r * .78} 0 0 1 ${x + r * .3} ${y - r}z"/>`
+      : `<circle cx="${x}" cy="${y}" r="${r}"/>` + [0, 45, 90, 135, 180, 225, 270, 315].map(a => {
+        const c1 = Math.cos(a * Math.PI / 180), s1 = Math.sin(a * Math.PI / 180);
+        return `<line x1="${(x + c1 * r * 1.5).toFixed(1)}" y1="${(y + s1 * r * 1.5).toFixed(1)}" x2="${(x + c1 * r * 2.1).toFixed(1)}" y2="${(y + s1 * r * 2.1).toFixed(1)}"/>`;
+      }).join('');
+    const drops = n => [11, 16, 21].slice(0, n).map(x => `<line x1="${x}" y1="27" x2="${x - 1.5}" y2="30.5"/>`).join('');
+    const parts = {
+      soleil: sun(16, 16, 6),
+      peu: sun(11, 11, 4.2) + cloud(3, 3, .82),
+      voile: sun(16, 13, 5.5) + '<line x1="5" y1="24" x2="27" y2="24"/><line x1="8" y1="28" x2="24" y2="28"/>',
+      nuageux: cloud(0, -2),
+      couvert: cloud(-4, -6, .85) + cloud(2, -1),
+      brouillard: '<line x1="5" y1="12" x2="27" y2="12"/><line x1="3" y1="17" x2="29" y2="17"/><line x1="5" y1="22" x2="27" y2="22"/><line x1="8" y1="27" x2="24" y2="27"/>',
+      pluie: cloud(0, -4) + drops(3),
+      averses: sun(9, 9, 3.6) + cloud(3, -2, .9) + drops(2),
+      neige: cloud(0, -4) + '<circle cx="11" cy="28" r="1.2"/><circle cx="16" cy="30" r="1.2"/><circle cx="21" cy="28" r="1.2"/>',
+      grele: cloud(0, -4) + '<circle cx="11" cy="28.5" r="1.8"/><circle cx="18" cy="29" r="1.8"/>',
+      orage: cloud(0, -5) + '<path class="wx-bolt" d="M17 20 13 26h3.5l-1.5 5 5-7h-3.5l1.5-4z"/>',
+    };
+    return `<svg class="wx-sky" viewBox="0 0 32 32" aria-hidden="true">${parts[k]}</svg>`;
+  }
+
+  /**
+   * Rose des vents : pistes (vue de dessus, numéros à leurs seuils), flèche du vent venant de sa direction,
+   * manche à air plantée à côté de la piste, du côté où va le vent, gonflée selon la force (pleine à 28 km/h).
+   */
+  function windRose(w, runways, level) {
+    const C = 160, R = 128, rad = a => a * Math.PI / 180, f = n => n.toFixed(1);
+    const pt = (a, r) => [C + r * Math.sin(rad(a)), C - r * Math.cos(rad(a))];
+    const color = { ok: 'var(--ok)', warn: 'var(--warn)', bad: 'var(--danger)' }[level] || 'var(--fg)';
+    let s = `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="var(--line)"/>`;
+    for (let a = 0; a < 360; a += 10) {
+      const [x1, y1] = pt(a, R), [x2, y2] = pt(a, a % 30 ? R - 6 : R - 12);
+      s += `<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}" stroke="var(--faint)" stroke-width="${a % 90 ? 1 : 2}"/>`;
+    }
+    [['N', 0], ['E', 90], ['S', 180], ['O', 270]].forEach(([t, a]) => { const [x, y] = pt(a, R - 24); s += `<text x="${f(x)}" y="${f(y + 4)}" text-anchor="middle" class="wx-card">${t}</text>`; });
+    // Une bande par axe de piste (07 et 25 forment un seul axe).
+    const axes = [...new Set(runways.map(r => r % 180))];
+    axes.forEach(ax => {
+      const lo = runways.includes(ax) ? ax : ax + 180, hi = (lo + 180) % 360;
+      s += `<g transform="rotate(${lo} ${C} ${C})"><rect x="${C - 14}" y="${C - 98}" width="28" height="196" rx="2" class="wx-rwy"/>`
+        + `<line x1="${C}" y1="${C - 68}" x2="${C}" y2="${C + 68}" class="wx-axis"/>`;
+      for (let i = 0; i < 4; i++) s += `<rect x="${C - 11 + i * 6.5}" y="${C - 94}" width="3" height="9" class="wx-mark"/><rect x="${C - 11 + i * 6.5}" y="${C + 85}" width="3" height="9" class="wx-mark"/>`;
+      s += `<text x="${C}" y="${C + 80}" text-anchor="middle" class="wx-num">${rwyNum(lo)}</text>`
+        + `<text x="${C}" y="${C - 72}" text-anchor="middle" class="wx-num" transform="rotate(180 ${C} ${C - 76})">${rwyNum(hi)}</text></g>`;
+    });
+    if (w && w.wind !== null) {
+      const dir = w.dir === null ? 0 : w.dir, down = dir + 180;
+      // Manche à air : du côté de la piste où va le vent, pour ne pas la croiser.
+      const ax = axes.length ? axes[0] : 0, sides = [ax + 90, ax + 270];
+      const dist = a => Math.abs(((a - down) % 360 + 540) % 360 - 180);
+      const [mx, my] = pt(dist(sides[0]) < dist(sides[1]) ? sides[0] : sides[1], axes.length ? 58 : 0);
+      const L = 74 * Math.max(.35, Math.min(1, w.wind / 28)), lit = Math.min(5, Math.round(w.wind / 5.6));
+      s += `<g transform="translate(${f(mx)} ${f(my)}) rotate(${down - 90})">`;
+      for (let i = 0; i < 5; i++) {
+        const x0 = i * L / 5, x1 = (i + 1) * L / 5, w0 = 13 - 6 * i / 5, w1 = 13 - 6 * (i + 1) / 5, on = i < lit;
+        s += `<polygon points="${f(x0)},${f(-w0)} ${f(x1)},${f(-w1)} ${f(x1)},${f(w1)} ${f(x0)},${f(w0)}" fill="${on ? (i % 2 ? 'var(--fg)' : color) : 'var(--faint)'}" fill-opacity="${on ? .95 : .35}" stroke="var(--bg)" stroke-width=".8"/>`;
+      }
+      s += `<circle r="3.5" fill="var(--fg)"/></g>`;
+      if (w.dir !== null) {
+        const [x0, y0] = pt(dir, 156), [x1, y1] = pt(dir, 112), [hx, hy] = pt(dir, 98), [lx, ly] = pt(dir - 7, 116), [rx, ry] = pt(dir + 7, 116);
+        s += `<line x1="${f(x0)}" y1="${f(y0)}" x2="${f(x1)}" y2="${f(y1)}" stroke="${color}" stroke-width="4" stroke-linecap="round"/>`
+          + `<polygon points="${f(hx)},${f(hy)} ${f(lx)},${f(ly)} ${f(rx)},${f(ry)}" fill="${color}"/>`;
+      }
+    }
+    const label = w && w.wind !== null ? `Vent du ${deg(w.dir)}, ${kmh(w.wind)} km/h` : 'Pas de vent observé';
+    return `<svg viewBox="0 0 320 320" role="img" aria-label="${esc(label)}">${s}</svg>`;
+  }
+
+  /** Ligne « piste conseillée, face, travers » d'une évaluation du serveur. */
+  function runwayText(a) {
+    const r = a && a.runway; if (!r) return '';
+    const gc = r.gust_cross !== null && Math.abs(r.gust_cross) > Math.abs(r.cross) ? `, ${Math.abs(r.gust_cross)} en rafale` : '';
+    return `piste ${rwyNum(r.runway)} : face ${r.head}, travers ${Math.abs(r.cross)}${gc}`;
+  }
+
+  function periodCard(p, night) {
+    if (!p) return '<div class="wx-period past"><div class="empty">Pas de prévision</div></div>';
+    const a = p.assess, gusts = p.gust_max !== null && p.gust_min !== null && p.gust_max - p.gust_min >= 5 ? ` <small>(${kmh(p.gust_min)} à ${kmh(p.gust_max)})</small>` : '';
+    const rain = p.rain ? `pluie ${fmt(p.rain, 1)} mm` : 'pas de pluie';
+    return `<div class="wx-period ${p.state} lv-${a.level}"${p.state === 'now' ? ' aria-current="true"' : ''}>`
+      + `<div class="wx-ph"><span class="lbl">${esc(p.name)}${p.state === 'now' ? ' · en cours' : ''}</span><i class="wx-dot" title="${LEVELS[a.level]}"></i></div>`
+      + `<div class="wx-sk">${sky(p.weather, night)}<span>${esc(p.label || '')}</span></div>`
+      + `<div class="wx-wind">${arrow(p.dir)}<b>${deg(p.dir)}</b> ${kmh(p.wind)} <small>km/h</small></div>`
+      + `<div class="wx-line">rafales ${kmh(p.gust)} km/h${gusts}</div>`
+      + (a.runway ? `<div class="wx-line">${esc(runwayText(a))}</div>` : '')
+      + `<div class="wx-line">${fmt(p.temp, 0)} °C · ${rain}${p.probarain !== null ? ` · risque ${fmt(p.probarain, 0)} %` : ''}</div>`
+      + (p.taf ? `<div class="wx-line">TAF : ${esc(tafText(p.taf))}</div>` : '')
+      + (a.reasons.length ? `<div class="wx-why">${esc(a.reasons.join(' · '))}</div>` : '')
+      + '</div>';
+  }
+
+  async function weather() {
+    const d = await api('weather');
+    const lv = d.observed ? d.observed.assess.level : null;
+
+    $('wx-problems').innerHTML = d.problems.length
+      ? `<div class="alert" role="alert"><span class="ico" aria-hidden="true">!</span><div><b>Page incomplète.</b><ul>${d.problems.map(p => `<li>${esc(p)}</li>`).join('')}</ul></div></div>` : '';
+
+    // ---- Vent observé ----
+    $('wx-rose').innerHTML = windRose(d.observed, d.runways, lv);
+    const o = d.observed;
+    if (o) {
+      $('wx-now-cap').textContent = `Moyenne de ${o.n} station${o.n > 1 ? 's' : ''}, pondérée par la distance à l’aéroclub. Dernier relevé ${at(o.ts)}.`;
+      const r = o.assess.runway, now = d.days[0] && d.days[0].periods.find(p => p && p.state === 'now');
+      const rows = [];
+      if (r) {
+        rows.push(['Piste conseillée', rwyNum(r.runway)], ['Vent de face', r.head + ' km/h'], ['Vent de travers', `${Math.abs(r.cross)} km/h ${side(r.cross)}`]);
+        if (r.gust_cross !== null) rows.push(['Travers en rafale', Math.abs(r.gust_cross) + ' km/h']);
+      }
+      if (o.temp !== null) rows.push(['Température', fmt(o.temp) + ' °C']);
+      if (now) rows.push(['Vent prévu en ce moment', `${deg(now.dir)}, ${kmh(now.wind)} km/h, rafales ${kmh(now.gust)}`]);
+      $('wx-now').innerHTML = `<div class="lbl">Vent</div>`
+        + `<div class="big">${deg(o.dir)}<small>${card16(o.dir)}</small> ${kmh(o.wind)}<small>km/h</small></div>`
+        + `<div class="delta">rafales ${kmh(o.gust)} km/h${o.gust_max !== null && o.gust_max - (o.gust || 0) >= 5 ? `, jusqu’à ${kmh(o.gust_max)} selon les stations` : ''}</div>`
+        + `<div class="wx-rows">${rows.map(([k, v]) => `<div><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join('')}</div>`
+        + `<div class="wx-level lv-${lv}"><i class="wx-dot"></i><span><b>${LEVELS[lv]}</b>${o.assess.reasons.length ? ' : ' + esc(o.assess.reasons.join(', ')) : ''}</span></div>`
+        + `<p class="note">Limites : travers ${d.limits.cross_max} km/h (orange dès ${d.limits.cross_warn}), rafales ${d.limits.gust_max} km/h (orange dès ${d.limits.gust_warn}).</p>`;
+    } else {
+      $('wx-now-cap').textContent = d.stations.length ? 'Aucune station n’a de relevé de vent récent.' : 'Pas encore d’observation.';
+      $('wx-now').innerHTML = '';
+    }
+    $('wx-st-cap').textContent = `Stations retenues dans un rayon de ${d.radius_km} km (réglables dans l’administration). Flèche : sens du vent ; poids : part dans la moyenne.`;
+    $('wx-stations').innerHTML = d.stations.length ? `<table><tr><th>Station</th><th>Distance</th><th>Direction</th><th>Vent</th><th>Rafales</th><th>Temp.</th><th>Relevé</th><th>Poids</th></tr>${d.stations.map(s =>
+      `<tr${s.used ? '' : ' class="muted"'}><td>${esc(s.name)}</td><td>${fmt(s.dist)} km</td><td>${arrow(s.dir)} ${s.dir !== null ? deg(s.dir) : '–'}</td><td>${kmh(s.wind)} km/h</td><td>${kmh(s.gust)} km/h</td>`
+      + `<td>${s.temp !== null ? fmt(s.temp) + ' °C' : '–'}</td><td>${s.ts ? esc(at(s.ts)) : 'aucun'}</td><td>${s.used ? s.weight + ' %' : (s.wind === null ? 'sans vent' : 'trop ancien')}</td></tr>`).join('')}</table>`
+      : '<p class="empty">Aucune station pour l’instant.</p>';
+
+    // ---- Ciel : observé (METAR) et prévu pour la période en cours ----
+    const m = d.metar, night = !!(d.sun && d.sun.night && d.sun.night.night);
+    const cur = d.days[0] && d.days[0].periods.find(p => p && p.state === 'now');
+    const skyBlock = (title, code, label, rows) => `<div class="wx-skyblock"><div class="lbl">${esc(title)}</div>`
+      + `<div class="wx-skyhead">${sky(code, night)}<span>${esc(label || '–')}</span></div>`
+      + `<div class="wx-rows">${rows.filter(r => r).map(([k, v]) => `<div><span>${esc(k)}</span><span>${v}</span></div>`).join('')}</div></div>`;
+    let skyHtml = '';
+    if (m && m.sky) {
+      const k = m.sky;
+      skyHtml += skyBlock(`Observé : METAR ${d.icao}${m.obs ? ' ' + at(m.obs) : ''}`, k.code, k.label, [
+        ['Plafond', k.ceiling !== null ? esc(feet(k.ceiling)) : 'aucun'],
+        ['Nuages', layers(k).map(esc).join('<br>') || '–'],
+        ['Visibilité', esc(visi(k.visibility))],
+        k.weather.length ? ['Temps présent', esc(k.weather.join(', '))] : null,
+        ['Conditions', esc(m.category || '–')],
+      ]);
+    }
+    if (cur) {
+      skyHtml += skyBlock(`Prévu ${{ Nuit: 'cette nuit', Matin: 'ce matin', 'Après-midi': 'cet après-midi', Soir: 'ce soir' }[cur.name] || ''} : Météo Concept`, cur.weather, cur.label, [
+        ['Pluie sur la période', cur.rain ? esc(fmt(cur.rain, 1)) + ' mm' : 'aucune'],
+        ['Risque de pluie', cur.probarain !== null ? esc(fmt(cur.probarain, 0)) + ' %' : '–'],
+        cur.probafog ? ['Risque de brouillard', esc(fmt(cur.probafog, 0)) + ' %'] : null,
+        ['Température', esc(fmt(cur.temp, 0)) + ' °C'],
+        cur.taf ? ['TAF', esc(tafText(cur.taf))] : null,
+      ]);
+    }
+    $('wx-sky').innerHTML = skyHtml || '<p class="empty">Pas encore de données sur le ciel.</p>';
+
+    // ---- Prévisions ----
+    const sun = d.sun && d.sun.days, isNight = (day, p) => {
+      if (!sun || !sun[day] || !p) return false;
+      const mid = (Date.parse(p.start) + Date.parse(p.end)) / 2;
+      return mid < Date.parse(sun[day].sunrise) || mid > Date.parse(sun[day].sunset);
+    };
+    [['wx-today', 0], ['wx-tomorrow', 1]].forEach(([id, i]) => {
+      const day = d.days[i];
+      $(id).innerHTML = day ? day.periods.map(p => periodCard(p, isNight(i, p))).join('') : '<p class="empty">Pas de prévision pour l’instant.</p>';
+    });
+    if (d.days[1]) $('wx-tomorrow-title').textContent = 'Demain, ' + new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(d.days[1].date + 'T12:00:00Z'));
+    $('wx-hours-box').hidden = !d.hours.length;
+    $('wx-hours').innerHTML = d.hours.length ? `<table><tr><th>Heure</th><th>Ciel</th><th>Vent</th><th>Rafales</th><th>Piste</th><th>Pluie</th><th></th></tr>${d.hours.map(h =>
+      `<tr><td>${hm(h.ts)}</td><td class="wx-skycell">${sky(h.weather, false)}${esc(h.label || '')}</td><td>${arrow(h.dir)} ${deg(h.dir)} ${kmh(h.wind)} km/h</td><td>${kmh(h.gust)} km/h</td>`
+      + `<td>${esc(runwayText(h.assess))}</td><td>${h.rain ? fmt(h.rain, 1) + ' mm' : '–'}</td><td><i class="wx-dot lv-${h.assess.level}" title="${esc(LEVELS[h.assess.level] + (h.assess.reasons.length ? ' : ' + h.assess.reasons.join(', ') : ''))}"></i></td></tr>`).join('')}</table>` : '';
+
+    // ---- TAF et METAR ----
+    const kt = w => !w ? '–' : `${w.dir === null || w.dir === 'VRB' ? 'VRB' : String(w.dir).padStart(3, '0') + '°'} ${w.kt} kt (${fmt(w.kt * 1.852, 0)} km/h)`
+      + (w.gust_kt ? `, rafales ${w.gust_kt} kt (${fmt(w.gust_kt * 1.852, 0)} km/h)` : '');
+    const TAF_TYPES = { BASE: 'Prévision', FM: 'À partir de', BECMG: 'Devient', TEMPO: 'Temporairement' };
+    const when = iso => iso ? wdFmt.format(new Date(iso)) + ' ' + timeFmt.format(new Date(iso)) : '?';
+    const t = d.taf;
+    $('wx-taf-title').textContent = 'TAF' + (d.icao ? ' ' + d.icao : '');
+    $('wx-taf-cap').textContent = t ? `Émis ${at(t.issued)}, valable du ${when(t.from)} au ${when(t.to)} (heures locales). Hauteurs des nuages au-dessus de l’aérodrome.` : '';
+    $('wx-taf').innerHTML = !d.icao ? '<p class="note">Code OACI de l’aérodrome à saisir dans l’administration (section Tablette).</p>'
+      : !t ? '<p class="note">Pas de TAF valide pour cet aérodrome en ce moment.</p>'
+      : `<table class="wx-taf"><tr><th>Période</th><th>Évolution</th><th>Vent</th><th>Visibilité</th><th>Temps</th><th>Nuages</th></tr>${t.groups.map(g =>
+        `<tr${g.to && Date.parse(g.to) <= Date.now() ? ' class="muted"' : ''}><td>${esc(when(g.from))} – ${esc(g.type === 'FM' && !g.to ? 'fin' : when(g.to))}</td><td>${g.prob ? g.prob + ' % de risque, ' + lower(TAF_TYPES[g.type]) : esc(TAF_TYPES[g.type] || g.type)}</td>`
+        + `<td>${g.wind ? esc(kt(g.wind)) : '–'}</td><td>${g.visibility !== null ? esc(visi(g.visibility)) : '–'}</td>`
+        + `<td class="wx-skycell">${g.code !== null ? sky(g.code, false) : ''}${esc(g.weather.length ? g.weather.join(', ') : (g.label || '–'))}</td>`
+        + `<td class="wx-skycell">${layers(g).map(esc).join('<br>') || '–'}</td></tr>`).join('')}</table>`
+        + `<details><summary>Texte du TAF</summary><pre class="wx-raw">${t.groups.map(g => esc(g.text)).join('\n')}</pre></details>`;
+    $('wx-metar-title').textContent = 'METAR' + (d.icao ? ' ' + d.icao : '');
+    $('wx-metar').innerHTML = !d.icao ? '<p class="note">Code OACI de l’aérodrome à saisir dans l’administration (section Tablette).</p>'
+      : !m ? '<p class="note">METAR indisponible pour le moment.</p>'
+      : `<div class="wx-rows">${[
+        ['Observé', m.obs ? esc(at(m.obs)) : '–'],
+        ['Conditions', esc(m.category || '–')],
+        ['Vent', esc(kt(m.wind))],
+        ['Visibilité', esc(visi(m.sky.visibility))],
+        ['Nuages', layers(m.sky).map(esc).join('<br>') || '–'],
+        ['QNH', m.qnh ? m.qnh + ' hPa' : '–'],
+      ].map(([k, v]) => `<div><span>${esc(k)}</span><span>${v}</span></div>`).join('')}</div><pre class="wx-raw">${esc(m.raw)}</pre>`;
+
+    // ---- Soleil ----
+    if (sun) {
+      const n = d.sun.night, t = sun[0], tm = sun[1];
+      $('wx-sun').innerHTML = tile('Maintenant', n ? (n.night ? 'Nuit' : 'Jour') : '–', '', n ? (n.night ? 'jour aéronautique à ' : 'nuit aéronautique à ') + hm(n.until) : '')
+        + tile('Lever', hm(t.sunrise), '', 'aube civile à ' + hm(t.dawn))
+        + tile('Coucher', hm(t.sunset), '', 'nuit aéronautique à ' + hm(t.dusk))
+        + tile('Demain', hm(tm.sunrise) + ' – ' + hm(tm.sunset), '', `jour aéronautique de ${hm(tm.dawn)} à ${hm(tm.dusk)}`);
+    }
+
+    const pts = d.points.filter(p => !p.dup), dup = d.points.length - pts.length, u = d.updated;
+    $('wx-foot').textContent = (pts.length ? `Prévisions : moyenne de ${pts.length} point${pts.length > 1 ? 's' : ''} de grille de Météo Concept (${pts.map(p => p.label).join(', ')}), pondérée par la distance à l’aéroclub`
+      + (dup ? ` ; ${dup} point${dup > 1 ? 's' : ''} tombant sur la même grille compté${dup > 1 ? 's' : ''} une seule fois` : '') + '. ' : '')
+      + `Mis à jour : observations ${u.observations ? hm(u.observations) : '–'}, prévisions ${u.forecast ? hm(u.forecast) : '–'}. `
+      + `Appels à Météo Concept aujourd’hui : ${d.calls.today} sur ${d.calls.quota} (arrêt à ${d.calls.stop_at}).`;
+  }
+  /** Page Météo : rechargée toutes les 5 minutes tant qu'elle est visible (le serveur garde les réponses en cache). */
+  async function meteo() {
+    await weather();
+    setInterval(() => { if (document.visibilityState === 'visible') weather().catch(e => console.error(e)); }, 300000);
+  }
+
   // Menu « burger » (petits écrans) : ouvert par le bouton, fermé par Échap ou un clic ailleurs.
   const nav = document.querySelector('nav'), burger = nav && nav.querySelector('.burger');
   if (burger) {
@@ -486,7 +763,7 @@
     document.addEventListener('click', e => { if (!nav.contains(e.target)) setOpen(false); });
   }
 
-  const pages = { accueil: home, electricite: electricity, chauffage: heating, temperatures, humidite: humidity, comparer: compare };
+  const pages = { accueil: home, electricite: electricity, chauffage: heating, temperatures, humidite: humidity, meteo, comparer: compare };
   const run = pages[document.body.dataset.page];
   if (run) run().catch(e => { console.error(e); const m = document.querySelector('main'); m.insertAdjacentHTML('afterbegin', '<div class="alert" role="alert"><span class="ico">!</span><div><b>Impossible de charger les données.</b> Recharger la page ; si ça persiste, regarder les journaux du conteneur php.</div></div>'); });
 })();

@@ -11,6 +11,7 @@ use Conso\Metrics;
 use Conso\Prices;
 use Conso\Settings;
 use Conso\Time;
+use Conso\Weather;
 use Conso\Config;
 
 /** Données préparées pour les pages du site (une route par page, lecture seule). */
@@ -318,6 +319,18 @@ final class Views
             'by_year' => $byYear,
             'episodes' => $episodes,
         ]);
+    }
+
+    /**
+     * GET /api/v1/weather : page Météo (vent observé autour de l'aéroclub, prévisions d'aujourd'hui et de demain,
+     * METAR et TAF). Peut appeler Météo Concept quand le cache est périmé (src/Weather.php).
+     */
+    public static function weather(): void
+    {
+        if (!Auth::requireRead()) {
+            return;
+        }
+        Http::json(200, Weather::view(time()));
     }
 
     /**

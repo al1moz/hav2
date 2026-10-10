@@ -35,9 +35,21 @@ final class View
         '/chauffage' => 'Chauffage',
         '/temperatures' => 'Températures',
         '/humidite' => 'Humidité',
+        '/meteo' => 'Météo',
         '/comparer' => 'Comparer',
         '/admin' => 'Administration',
     ];
+
+    /** Icônes de la barre (24 x 24, au trait, couleur du texte) : roue dentée et porte avec une flèche qui sort. */
+    private const ICONS = [
+        '/admin' => "<path d='M10.3 4.6 10.6 1.9 13.4 1.9 13.7 4.6 16 5.6 18.1 3.9 20.1 5.9 18.4 8 19.4 10.3 22.1 10.6 22.1 13.4 19.4 13.7 18.4 16 20.1 18.1 18.1 20.1 16 18.4 13.7 19.4 13.4 22.1 10.6 22.1 10.3 19.4 8 18.4 5.9 20.1 3.9 18.1 5.6 16 4.6 13.7 1.9 13.4 1.9 10.6 4.6 10.3 5.6 8 3.9 5.9 5.9 3.9 8 5.6z'/><circle cx='12' cy='12' r='3.2'/>",
+        'logout' => "<rect x='3.5' y='3' width='9.5' height='18' rx='1'/><circle cx='10.3' cy='12.6' r='.9' fill='currentColor' stroke='none'/><path d='M13 12h8m-3.2-3.2L21 12l-3.2 3.2'/>",
+    ];
+
+    private static function navIcon(string $key): string
+    {
+        return '<svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true">' . self::ICONS[$key] . '</svg>';
+    }
 
     public static function h(?string $value): string
     {
@@ -82,7 +94,10 @@ final class View
             $links = '';
             foreach (self::NAV as $href => $label) {
                 $current = $href === $path ? ' aria-current="page"' : '';
-                $links .= '<a href="' . $href . '"' . $current . '>' . self::h($label) . '</a>';
+                // Administration : une roue dentée (le libellé reste lu par les lecteurs d'écran et s'affiche dans le menu « burger »).
+                $links .= isset(self::ICONS[$href])
+                    ? '<a href="' . $href . '" class="nav-icon" title="' . self::h($label) . '"' . $current . '>' . self::navIcon($href) . '<span class="nav-label">' . self::h($label) . '</span></a>'
+                    : '<a href="' . $href . '"' . $current . '>' . self::h($label) . '</a>';
             }
             // Sur smartphone, les liens se replient derrière le bouton « burger » (public/assets/app.js).
             $nav = '<nav aria-label="Pages"><a class="brand" href="/" title="' . $site . '" aria-label="' . $site . ', page Aujourd\'hui">'
@@ -90,7 +105,7 @@ final class View
                 . '<button type="button" class="burger" aria-controls="navlinks" aria-expanded="false" aria-label="Menu"><span></span><span></span><span></span></button>'
                 . '<div class="navlinks" id="navlinks">' . $links
                 . '<form method="post" action="/deconnexion" class="logout"><input type="hidden" name="csrf" value="' . self::h(Session::csrf()) . '">'
-                . '<button type="submit">Se déconnecter</button></form></div></nav>';
+                . '<button type="submit" class="nav-icon" title="Se déconnecter">' . self::navIcon('logout') . '<span class="nav-label">Se déconnecter</span></button></form></div></nav>';
         }
         $v = self::assetVersion();
         $chat = $withNav && Chat::available() ? self::chat() : '';
